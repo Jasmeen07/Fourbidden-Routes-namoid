@@ -11,5 +11,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@namoidhq/react": "^4.0.0"
   }
 }
