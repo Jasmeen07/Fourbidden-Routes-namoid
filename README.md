@@ -24,7 +24,7 @@ NamoID product, security recommendation, or endorsement.
 - **Contributor:** Jasmeen07
 - **Repository URL:** https://github.com/Jasmeen07/Fourbidden-Routes-namoid
 - **Live demo:** http://localhost:5173
-- **Final commit:** Pinned at submission time via `git rev-parse HEAD`
+- **Final commit:** `943c34e3e20c9bf3dc87875464565737bd27cccf`
 - **License:** MIT
 
 ---
