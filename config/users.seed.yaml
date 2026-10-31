@@ -1,0 +1,49 @@
+users:
+  - sub: "usr_req_a"
+    display_name: "Alice Requester"
+    email: "alice.requester@namoid.test"
+    manager_sub: "usr_mgr_1"
+    active: true
+    roles:
+      - "requester"
+
+  - sub: "usr_req_b"
+    display_name: "Bob DualRole"
+    email: "bob.dual@namoid.test"
+    manager_sub: "usr_mgr_1"
+    active: true
+    roles:
+      - "requester"
+      - "risk_reviewer"
+
+  - sub: "usr_mgr_1"
+    display_name: "Mary Manager"
+    email: "mary.manager@namoid.test"
+    manager_sub: null
+    active: true
+    roles:
+      - "manager"
+
+  - sub: "usr_risk_1"
+    display_name: "Rachel RiskReviewer"
+    email: "rachel.risk@namoid.test"
+    manager_sub: null
+    active: true
+    roles:
+      - "risk_reviewer"
+
+  - sub: "usr_owner_1"
+    display_name: "Oscar ResourceOwner"
+    email: "oscar.owner@namoid.test"
+    manager_sub: null
+    active: true
+    roles:
+      - "resource_owner"
+
+  - sub: "usr_risk_2"
+    display_name: "Rita AlternateRisk"
+    email: "rita.risk@namoid.test"
+    manager_sub: null
+    active: true
+    roles:
+      - "risk_reviewer"

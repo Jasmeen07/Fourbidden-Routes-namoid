@@ -1,0 +1,55 @@
+version: 1
+assumption_notice: "Values below are demo defaults, NOT NamoID policy. Confirm with NamoID."
+limits:
+  min_duration_minutes: 2            # 2 min allows real-time demos; production default would be larger
+  max_duration_minutes_by_tier:
+    PUBLIC_SYNTHETIC: 10080          # 7 d
+    INTERNAL_SYNTHETIC: 4320         # 3 d
+    RESTRICTED_SYNTHETIC: 1440       # 1 d
+  max_cumulative_minutes_with_extensions: 20160
+  request_pending_ttl_hours: 72
+approval_matrix:                     # default = all three, matching brief §10
+  PUBLIC_SYNTHETIC:     [manager, resource_owner, risk_reviewer]
+  INTERNAL_SYNTHETIC:   [manager, resource_owner, risk_reviewer]
+  RESTRICTED_SYNTHETIC: [manager, resource_owner, risk_reviewer]
+purposes:
+  - MODEL_EVALUATION
+  - BIAS_AUDIT
+  - FRAUD_RULE_TUNING
+  - PROTOTYPE_DEMO
+  - SECURITY_REDTEAM_SIM
+  - ANALYTICS_REPORTING
+risk_controls:
+  catalog:
+    - activity_logging
+    - synthetic_data_only
+    - isolated_workspace
+    - output_filtering
+    - no_export
+    - human_review_of_outputs
+    - retention_limit_declared
+  required_by_tier:
+    PUBLIC_SYNTHETIC:
+      - activity_logging
+    INTERNAL_SYNTHETIC:
+      - activity_logging
+      - synthetic_data_only
+    RESTRICTED_SYNTHETIC:
+      - activity_logging
+      - synthetic_data_only
+      - isolated_workspace
+revocation:
+  allowed_revokers:
+    - resource_owner
+    - risk_reviewer
+    - manager_of_requester
+    - requester_self
+  reason_codes:
+    - POLICY_VIOLATION
+    - SUSPECTED_MISUSE
+    - PURPOSE_COMPLETE
+    - OWNER_REQUEST
+    - SECURITY_INCIDENT
+    - OTHER
+extension:
+  mode: new_request                  # baseline per brief §5; linked via extends_grant_id

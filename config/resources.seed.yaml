@@ -1,0 +1,70 @@
+resources:
+  - id: "M-sentiment-v1"
+    name: "Customer Sentiment Model v1"
+    kind: "model"
+    tier: "INTERNAL_SYNTHETIC"
+    owner_sub: "usr_owner_1"
+    active: true
+    allowed_actions:
+      - name: "view_metadata"
+        risk_weight: 1
+      - name: "query"
+        risk_weight: 2
+      - name: "batch_query"
+        risk_weight: 3
+
+  - id: "M-fraudscore-v2"
+    name: "Fraud Risk Scoring Engine v2"
+    kind: "model"
+    tier: "RESTRICTED_SYNTHETIC"
+    owner_sub: "usr_owner_1"
+    active: true
+    allowed_actions:
+      - name: "query"
+        risk_weight: 3
+      - name: "batch_query"
+        risk_weight: 4
+      - name: "fine_tune_simulated"
+        risk_weight: 8
+
+  - id: "D-customers-synth"
+    name: "Synthetic Customer Profiles Dataset"
+    kind: "dataset"
+    tier: "INTERNAL_SYNTHETIC"
+    owner_sub: "usr_owner_1"
+    active: true
+    allowed_actions:
+      - name: "read_sample"
+        risk_weight: 1
+      - name: "read_full"
+        risk_weight: 4
+      - name: "export_masked"
+        risk_weight: 6
+
+  - id: "D-claims-synth"
+    name: "Synthetic Insurance Claims Dataset"
+    kind: "dataset"
+    tier: "RESTRICTED_SYNTHETIC"
+    owner_sub: "usr_owner_1"
+    active: true
+    allowed_actions:
+      - name: "read_sample"
+        risk_weight: 2
+      - name: "read_full"
+        risk_weight: 5
+      - name: "export_masked"
+        risk_weight: 7
+      - name: "join_simulated"
+        risk_weight: 8
+
+  - id: "D-lexicon-public"
+    name: "Public Evaluation Lexicon"
+    kind: "dataset"
+    tier: "PUBLIC_SYNTHETIC"
+    owner_sub: "usr_owner_1"
+    active: true
+    allowed_actions:
+      - name: "read_sample"
+        risk_weight: 1
+      - name: "read_full"
+        risk_weight: 2

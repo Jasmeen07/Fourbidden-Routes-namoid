@@ -1,0 +1,288 @@
+{
+  "verified": true,
+  "head_hash": "18e78e67fec9a52b60b1e9172320ee542b289929e7e7bc818c07765f1416994f",
+  "events": [
+    {
+      "seq": 1,
+      "id": "evt_1_1793437200",
+      "ts": "2026-10-31T09:00:00+00:00",
+      "type": "REQUEST_SUBMITTED",
+      "actor_sub": "usr_req_a",
+      "actor_role": "requester",
+      "subject_type": "request",
+      "subject_id": "req_4ae9820b30f8",
+      "payload": {
+        "resource_id": "M-sentiment-v1",
+        "purpose_code": "BIAS_AUDIT",
+        "actions": [
+          "batch_query",
+          "query"
+        ],
+        "duration_minutes": 30,
+        "risk_controls": [
+          "activity_logging",
+          "synthetic_data_only"
+        ],
+        "policy_version": 1,
+        "status": "IN_REVIEW"
+      },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "afec3a6f83aae1f42f022ab92fa4bb512043a44721cab9e8231ae97e363753ab"
+    },
+    {
+      "seq": 2,
+      "id": "evt_2_1793437500",
+      "ts": "2026-10-31T09:05:00+00:00",
+      "type": "DECISION_APPROVED",
+      "actor_sub": "usr_mgr_1",
+      "actor_role": "manager",
+      "subject_type": "slot",
+      "subject_id": "slot_107f1d05c7cc",
+      "payload": {
+        "request_id": "req_4ae9820b30f8",
+        "slot_role": "manager",
+        "decision": "APPROVED",
+        "rationale": null,
+        "approved_limits": null
+      },
+      "prev_hash": "afec3a6f83aae1f42f022ab92fa4bb512043a44721cab9e8231ae97e363753ab",
+      "hash": "3244cc3987297945d5539390c203aba2f78c62a8c59e813888399c90714f1db7"
+    },
+    {
+      "seq": 3,
+      "id": "evt_3_1793437800",
+      "ts": "2026-10-31T09:10:00+00:00",
+      "type": "DECISION_NARROWED",
+      "actor_sub": "usr_risk_1",
+      "actor_role": "risk_reviewer",
+      "subject_type": "slot",
+      "subject_id": "slot_61ed1a236595",
+      "payload": {
+        "request_id": "req_4ae9820b30f8",
+        "slot_role": "risk_reviewer",
+        "decision": "NARROWED",
+        "rationale": "Narrowing to single query to control load",
+        "approved_limits": {
+          "actions": [
+            "query"
+          ],
+          "duration_minutes": 15
+        }
+      },
+      "prev_hash": "3244cc3987297945d5539390c203aba2f78c62a8c59e813888399c90714f1db7",
+      "hash": "290dbdb2f2778fc6cd5a47c1d1b658e9034357234ae76ab77969734796f9c94f"
+    },
+    {
+      "seq": 4,
+      "id": "evt_4_1793438100",
+      "ts": "2026-10-31T09:15:00+00:00",
+      "type": "DECISION_APPROVED",
+      "actor_sub": "usr_owner_1",
+      "actor_role": "resource_owner",
+      "subject_type": "slot",
+      "subject_id": "slot_7890e618ec59",
+      "payload": {
+        "request_id": "req_4ae9820b30f8",
+        "slot_role": "resource_owner",
+        "decision": "APPROVED",
+        "rationale": null,
+        "approved_limits": null
+      },
+      "prev_hash": "290dbdb2f2778fc6cd5a47c1d1b658e9034357234ae76ab77969734796f9c94f",
+      "hash": "cce0bc47c8070911f6889310c1f2fbb677e2f35690cfb9f96b98291fa6d5cc96"
+    },
+    {
+      "seq": 5,
+      "id": "evt_5_1793438100",
+      "ts": "2026-10-31T09:15:00+00:00",
+      "type": "REQUEST_APPROVED",
+      "actor_sub": "usr_owner_1",
+      "actor_role": "resource_owner",
+      "subject_type": "request",
+      "subject_id": "req_4ae9820b30f8",
+      "payload": {
+        "grant_id": "grant_19038b2b273d",
+        "merged_actions": [
+          "query"
+        ],
+        "merged_duration": 15
+      },
+      "prev_hash": "cce0bc47c8070911f6889310c1f2fbb677e2f35690cfb9f96b98291fa6d5cc96",
+      "hash": "dbbbe5855b2d98d9a1ad25fa34cbd5f13e660ea82f0c67487f63fb6612587693"
+    },
+    {
+      "seq": 6,
+      "id": "evt_6_1793438100",
+      "ts": "2026-10-31T09:15:00+00:00",
+      "type": "GRANT_ACTIVATED",
+      "actor_sub": "usr_owner_1",
+      "actor_role": "resource_owner",
+      "subject_type": "grant",
+      "subject_id": "grant_19038b2b273d",
+      "payload": {
+        "request_id": "req_4ae9820b30f8",
+        "resource_id": "M-sentiment-v1",
+        "actions": [
+          "query"
+        ],
+        "duration_minutes": 15,
+        "expires_at": "2026-10-31T09:30:00+00:00"
+      },
+      "prev_hash": "dbbbe5855b2d98d9a1ad25fa34cbd5f13e660ea82f0c67487f63fb6612587693",
+      "hash": "18335a6b649f961a2b9c2098a3ffe999eb1b8257109bf96030009c45f6f2e47d"
+    },
+    {
+      "seq": 7,
+      "id": "evt_7_1793438220",
+      "ts": "2026-10-31T09:17:00+00:00",
+      "type": "ACCESS_ALLOWED",
+      "actor_sub": "usr_req_a",
+      "actor_role": null,
+      "subject_type": "grant",
+      "subject_id": "grant_19038b2b273d",
+      "payload": {
+        "resource_id": "M-sentiment-v1",
+        "action": "query",
+        "declared_purpose": "BIAS_AUDIT",
+        "grant_id": "grant_19038b2b273d",
+        "decision_code": null
+      },
+      "prev_hash": "18335a6b649f961a2b9c2098a3ffe999eb1b8257109bf96030009c45f6f2e47d",
+      "hash": "a2c3fe4022f1206de17064048f354b0ea89bdd36afc1d1dace0c92a5cd6a8e68"
+    },
+    {
+      "seq": 8,
+      "id": "evt_8_1793438280",
+      "ts": "2026-10-31T09:18:00+00:00",
+      "type": "ACCESS_DENIED",
+      "actor_sub": "usr_req_a",
+      "actor_role": null,
+      "subject_type": "grant",
+      "subject_id": "grant_19038b2b273d",
+      "payload": {
+        "resource_id": "M-sentiment-v1",
+        "action": "batch_query",
+        "declared_purpose": "BIAS_AUDIT",
+        "grant_id": "grant_19038b2b273d",
+        "decision_code": "DENY_ACTION_NOT_GRANTED"
+      },
+      "prev_hash": "a2c3fe4022f1206de17064048f354b0ea89bdd36afc1d1dace0c92a5cd6a8e68",
+      "hash": "2a970a7746824d98f17d103d9a92b146550b01f3577295ec595ba46f88bdf07c"
+    },
+    {
+      "seq": 9,
+      "id": "evt_9_1793438340",
+      "ts": "2026-10-31T09:19:00+00:00",
+      "type": "ACCESS_DENIED",
+      "actor_sub": "usr_req_a",
+      "actor_role": null,
+      "subject_type": "grant",
+      "subject_id": "grant_19038b2b273d",
+      "payload": {
+        "resource_id": "M-sentiment-v1",
+        "action": "query",
+        "declared_purpose": "MODEL_EVALUATION",
+        "grant_id": "grant_19038b2b273d",
+        "decision_code": "DENY_PURPOSE_MISMATCH"
+      },
+      "prev_hash": "2a970a7746824d98f17d103d9a92b146550b01f3577295ec595ba46f88bdf07c",
+      "hash": "b8f1dca359c4b41940e06b91ba9aca9d13db34eb9182e378cceeaba1c70e80bd"
+    },
+    {
+      "seq": 10,
+      "id": "evt_10_1793438940",
+      "ts": "2026-10-31T09:29:00+00:00",
+      "type": "REQUEST_SUBMITTED",
+      "actor_sub": "usr_req_b",
+      "actor_role": "requester",
+      "subject_type": "request",
+      "subject_id": "req_21716be2bf27",
+      "payload": {
+        "resource_id": "D-claims-synth",
+        "purpose_code": "FRAUD_RULE_TUNING",
+        "actions": [
+          "read_full",
+          "read_sample"
+        ],
+        "duration_minutes": 60,
+        "risk_controls": [
+          "activity_logging",
+          "isolated_workspace",
+          "synthetic_data_only"
+        ],
+        "policy_version": 1,
+        "status": "IN_REVIEW"
+      },
+      "prev_hash": "b8f1dca359c4b41940e06b91ba9aca9d13db34eb9182e378cceeaba1c70e80bd",
+      "hash": "6235c74ab59aa67b81523e32814724b7664e15151a19b473d8800eb2fb26a038"
+    },
+    {
+      "seq": 11,
+      "id": "evt_11_1793438940",
+      "ts": "2026-10-31T09:29:00+00:00",
+      "type": "SECURITY_TAMPER_ATTEMPT",
+      "actor_sub": "usr_req_b",
+      "actor_role": "requester",
+      "subject_type": "request",
+      "subject_id": "req_21716be2bf27",
+      "payload": {
+        "attempt": "self_review",
+        "slot_role": "risk_reviewer",
+        "error": "SOD_SELF_REVIEW"
+      },
+      "prev_hash": "6235c74ab59aa67b81523e32814724b7664e15151a19b473d8800eb2fb26a038",
+      "hash": "59d5da198c42f72ffb684a204e56792260b79827e261454199b69ce958d8909d"
+    },
+    {
+      "seq": 12,
+      "id": "evt_12_1793439240",
+      "ts": "2026-10-31T09:34:00+00:00",
+      "type": "DECISION_REJECTED",
+      "actor_sub": "usr_risk_1",
+      "actor_role": "risk_reviewer",
+      "subject_type": "slot",
+      "subject_id": "slot_1172b6ceae36",
+      "payload": {
+        "request_id": "req_21716be2bf27",
+        "slot_role": "risk_reviewer",
+        "decision": "REJECTED",
+        "rationale": "Insufficient isolation controls for full dataset query ask",
+        "approved_limits": null
+      },
+      "prev_hash": "59d5da198c42f72ffb684a204e56792260b79827e261454199b69ce958d8909d",
+      "hash": "15edd06ba1fc009ade39d8dd1f801542761a3c3571c2c3ceadb13360520c6fdd"
+    },
+    {
+      "seq": 13,
+      "id": "evt_13_1793439240",
+      "ts": "2026-10-31T09:34:00+00:00",
+      "type": "REQUEST_REJECTED",
+      "actor_sub": "usr_risk_1",
+      "actor_role": "risk_reviewer",
+      "subject_type": "request",
+      "subject_id": "req_21716be2bf27",
+      "payload": {
+        "rejected_by_slot": "risk_reviewer",
+        "rationale": "Insufficient isolation controls for full dataset query ask"
+      },
+      "prev_hash": "15edd06ba1fc009ade39d8dd1f801542761a3c3571c2c3ceadb13360520c6fdd",
+      "hash": "90927edee2d804992ec87d042aaed8b362a3bc7bcf96d9cbe4c6f8da5d555d8f"
+    },
+    {
+      "seq": 14,
+      "id": "evt_14_1793440740",
+      "ts": "2026-10-31T09:59:00+00:00",
+      "type": "GRANT_EXPIRED",
+      "actor_sub": null,
+      "actor_role": null,
+      "subject_type": "grant",
+      "subject_id": "grant_19038b2b273d",
+      "payload": {
+        "resource_id": "M-sentiment-v1",
+        "expired_at": "2026-10-31T09:30:00"
+      },
+      "prev_hash": "90927edee2d804992ec87d042aaed8b362a3bc7bcf96d9cbe4c6f8da5d555d8f",
+      "hash": "18e78e67fec9a52b60b1e9172320ee542b289929e7e7bc818c07765f1416994f"
+    }
+  ]
+}

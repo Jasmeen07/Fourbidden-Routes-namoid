@@ -1,0 +1,16 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+node_modules/
+dist/
+.system_generated/
+backend/.venv/
+coverage/
+htmlcov/
