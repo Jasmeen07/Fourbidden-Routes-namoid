@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HostedAuthButton, NamoIDSignIn, useAuthConfig } from '@namoidhq/react';
+import { SignIn, HostedAuthButton, NamoIDSignIn, useAuthConfig } from '@namoidhq/react';
 import type { CompletedHostedAuth } from '@namoidhq/react';
 import { useAuth } from '../context/AuthContext';
 import { Shield, Lock, CheckCircle2, ArrowRight, AlertTriangle, ExternalLink } from 'lucide-react';
@@ -130,29 +130,14 @@ export const SignInPage: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Primary Official HostedAuthButton */}
-            <div style={{ marginBottom: '1.75rem', textAlign: 'center' }}>
-              <HostedAuthButton
+            {/* Primary Official Quickstart Component from NamoID Console */}
+            <div style={{ marginBottom: '1.75rem' }}>
+              <SignIn
                 redirectUri={redirectUri}
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  padding: '0.85rem 1.25rem',
-                  fontSize: '1rem',
-                  fontWeight: 650,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.6rem',
-                  boxShadow: 'var(--shadow-sm)',
-                }}
-              >
-                <Lock size={17} />
-                <span>Sign In with NamoID Hosted Auth</span>
-              </HostedAuthButton>
-              <span style={{ display: 'block', marginTop: '0.6rem', fontSize: '0.785rem', color: 'var(--text-muted)' }}>
-                Redirects to verified OIDC endpoint at <code className="font-mono">/auth/callback</code>
-              </span>
+                title="Sign In with NamoID"
+                description="Continue with the verified sign-in methods configured in your NamoID tenant."
+                buttonLabel="Sign In with NamoID"
+              />
             </div>
 
             {/* Divider */}
