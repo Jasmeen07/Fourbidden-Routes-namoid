@@ -1,13 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HostedAuthButton, NamoIDSignIn } from '@namoidhq/react';
+import { HostedAuthButton, NamoIDSignIn, useAuthConfig } from '@namoidhq/react';
 import type { CompletedHostedAuth } from '@namoidhq/react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Lock, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Shield, Lock, CheckCircle2, ArrowRight, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export const SignInPage: React.FC = () => {
   const navigate = useNavigate();
   const { setNamoIDAuth, user, isNamoIDAuthenticated, logout } = useAuth();
+  const { config, loading: configLoading } = useAuthConfig();
   const redirectUri = `${window.location.origin}/auth/callback`;
 
   const handleSignInComplete = async (result: CompletedHostedAuth) => {
@@ -25,8 +26,10 @@ export const SignInPage: React.FC = () => {
     console.error('NamoID sign-in error:', error);
   };
 
+  const isClosedMode = config?.access_mode === 'closed';
+
   return (
-    <div style={{ maxWidth: 520, margin: '3.5rem auto', padding: '0 1rem' }}>
+    <div style={{ maxWidth: 540, margin: '3.5rem auto', padding: '0 1rem' }}>
       <div className="card" style={{ padding: '2.25rem', boxShadow: 'var(--shadow-md)' }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -52,6 +55,45 @@ export const SignInPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Closed Access Mode Warning & Resolution Guidance */}
+        {isClosedMode && (
+          <div style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: 'var(--radius-md)',
+            padding: '1rem 1.15rem',
+            marginBottom: '1.5rem',
+            fontSize: '0.835rem',
+            color: '#92400e',
+            lineHeight: 1.55,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, marginBottom: '0.45rem', color: '#b45309' }}>
+              <AlertTriangle size={17} color="#d97706" />
+              <span>NamoID Console Setting: Access Mode is "Closed"</span>
+            </div>
+            <p style={{ marginBottom: '0.65rem' }}>
+              Your NamoID project sandbox (<code>{config?.issuer?.replace('https://', '')}</code>) is currently rejecting sign-ins with <strong>HTTP 403 Forbidden</strong> because its Access Mode is set to Closed.
+            </p>
+            <div style={{ background: '#fef3c7', padding: '0.65rem 0.85rem', borderRadius: 'var(--radius-sm)', marginBottom: '0.65rem' }}>
+              <p style={{ fontWeight: 650, marginBottom: '0.35rem', color: '#78350f' }}>To enable sign-ins in your NamoID Console:</p>
+              <ol style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.8rem', display: 'grid', gap: '0.25rem' }}>
+                <li>Log in to <a href="https://console.namoid.in" target="_blank" rel="noreferrer" style={{ color: '#b45309', fontWeight: 700, textDecoration: 'underline' }}>console.namoid.in <ExternalLink size={11} style={{ verticalAlign: 'middle' }} /></a></li>
+                <li>Go to <strong>Project Settings &rarr; Access Policy</strong> and switch from <strong>Closed</strong> to <strong>Open</strong> (or Invite-Only).</li>
+                <li>Under <strong>Allowed Redirect URIs</strong>, add: <code className="font-mono" style={{ background: '#ffffff', padding: '0.1rem 0.35rem', borderRadius: 4 }}>{redirectUri}</code></li>
+              </ol>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.785rem', padding: '0.3rem 0.65rem' }}
+              >
+                Continue in Dev Persona Mode &rarr;
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Status if already signed in */}
         {isNamoIDAuthenticated && user ? (
           <div style={{
@@ -71,7 +113,7 @@ export const SignInPage: React.FC = () => {
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
               <button
-                onClick={() => navigate('/catalog')}
+                onClick={() => navigate('/dashboard')}
                 className="btn btn-primary"
                 style={{ fontSize: '0.85rem' }}
               >
