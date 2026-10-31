@@ -103,6 +103,16 @@ def init_database(custom_engine=None) -> None:
 
     if str(target_engine.url).startswith("sqlite"):
         with target_engine.connect() as conn:
+            # Safe migration for grants utilization columns (Innovation 5)
+            try:
+                conn.exec_driver_sql("ALTER TABLE grants ADD COLUMN last_used_at DATETIME;")
+            except Exception:
+                pass
+            try:
+                conn.exec_driver_sql("ALTER TABLE grants ADD COLUMN invocation_count INTEGER DEFAULT 0 NOT NULL;")
+            except Exception:
+                pass
+
             for ddl in TRIGGERS_DDL:
                 conn.exec_driver_sql(ddl)
             conn.commit()

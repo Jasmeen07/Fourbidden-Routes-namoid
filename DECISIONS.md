@@ -12,9 +12,15 @@
 2. **Database Defense-in-Depth:** 7 SQLite triggers that enforce invariants (append-only audit trail, approved-request grant dependency, grant scope immutability, terminal grant states, slot decision freezing, and request content freezing) directly in the database engine.
 3. **Backend API & Services:** Complete FastAPI services for request submission, multi-slot review routing, dynamic grant generation, break-glass emergency revocation, Policy Enforcement Point (PEP) gateway invocation simulation with watermark banners, and continuous cryptographic audit verification (`/api/audit/verify`).
 4. **Advisory AI Track:** Module 1 (Risk Lens with explainable scoring 0–100, factor attribution weights, and counterfactual narrowing recommendations) and Module 4 (Policy-as-Code Assurance Linter with static checks and what-if routing projections).
-5. **Testing & Coverage:** 100% coverage of the 65 mandatory Edge Cases (EC-01 to EC-65) across 71 pytest tests, including the 4 named challenge scenarios (`test_separation_of_duties`, `test_expiry`, `test_narrowed_scope`, `test_emergency_revocation`).
-6. **Frontend SPA:** A modern React + TypeScript dashboard with live server-drift countdown timers, visual LimitsDiff comparison, interactive DecisionDrawer, PDP decision trace inspector, audit verification badge, and one-click role switcher.
-7. **Deterministic Sample History:** Generated and verified 14-event audit trail exported in `docs/sample_access_history.json` and `docs/sample_access_history.csv`.
+5. **The Five Complementary Innovations (Updated Proposal):**
+   - **Innovation 1:** Intelligent Risk Scoring and Recommendations (explainable weights, 0–100 score, counterfactual narrowing tips).
+   - **Innovation 2:** Smart Priority Queue Management (Urgency vs. Risk scoring, SLA countdowns, waiting starvation escalation, and Approval Bottleneck Detection).
+   - **Innovation 3:** Intelligent Approval Assistance (Role-tailored contextual briefs for Manager, Risk Reviewer, and Resource Owner, complete with decision lineage).
+   - **Innovation 4:** Purpose-Bound Access Enforcement & Violation Detection (Runtime operation-level purpose validation, scope enforcement, security alerts to resource owners, and interactive PEP simulator preset scenarios).
+   - **Innovation 5:** Smart Access Utilization and Early Revocation (Runtime invocation tracking, last-used timestamp, dormancy detection, and requester proactive early release).
+6. **Testing & Coverage:** 100% coverage of the 65 mandatory Edge Cases (EC-01 to EC-65) across 75 pytest tests, including the 4 named challenge scenarios (`test_separation_of_duties`, `test_expiry`, `test_narrowed_scope`, `test_emergency_revocation`) and dedicated innovation test suites.
+7. **Executive UI Redesign (Warm Beige & Sand Palette):** A modern React + TypeScript dashboard completely redesigned in warm beige (`#fbf9f4`), sand (`#f4efe6`), and terracotta (`#c2410c`), eliminating dark blue-black panels and low-contrast typography for executive readability.
+8. **Deterministic Sample History:** Generated and verified 14-event audit trail exported in `docs/sample_access_history.json` and `docs/sample_access_history.csv`.
 
 ### What was left out:
 - Connection to live third-party AI models (strictly avoided in accordance with the mock-first safety boundary and Blueprint §15.2).
@@ -60,10 +66,12 @@ Database Layer (SQLAlchemy + 7 SQLite Triggers) ◄────────┘
 2. **Limits Algebra Invariants (SG-3):** Verified via Hypothesis property-based testing that narrowing is strictly monotonic, meet operations are associative and commutative, and narrowed bounds never exceed requested bounds.
 3. **Emergency Revocation (SG-4):** Verified that emergency revocation immediately marks grants as `REVOKED`, halting PEP execution even if local client clocks are manipulated.
 4. **Time & Expiry Invariants:** Verified that effective status is evaluated dynamically against server time and that clock rollback cannot resurrect expired or revoked grants.
+5. **Complementary Innovations Verification:** Verified that priority scoring, starvation escalation, bottleneck analytics, role assistance, purpose-bound violation detection, and early release endpoints enforce all business and safety rules.
 
 ---
 
-## With Another Hour
+## Design System & Accessibility Decisions
 
-1. **Streaming PEP Gateway:** Implement an SSE / streaming token proxy filter that truncates model output tokens midway if a grant expires or is revoked while an inference query is streaming.
-2. **MCP Server Integration:** Package the PEP gateway as an official Model Context Protocol (MCP) server proxy to govern real Claude Desktop and local LLM tool invocations out-of-the-box.
+- **Color Palette Rationale:** Shifted away from dark "cyberpunk/blue-black" themes toward a warm light beige, sand, and porcelain palette (`#fbf9f4`, `#f4efe6`, `#ffffff`) with terracotta brand accents (`#c2410c`). This elevates GrantGate into an enterprise-grade governance platform that executives, compliance officers, and auditors can comfortably use during audits without visual fatigue.
+- **Semantic Badging:** Standardized green for active/approved, amber for narrowed/dormant/caution, rose for rejected/revoked/critical violations, and deep slate for neutral metadata.
+- **High-Contrast Text Hierarchy:** Enforced minimum 4.5:1 WCAG contrast ratios across all cards, badges, and code snippets.

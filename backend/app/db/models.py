@@ -112,6 +112,8 @@ class Grant(Base):
     revoke_reason_code = Column(String(64), nullable=True)
     revoke_emergency = Column(Boolean, default=False, nullable=False)
     suspended_at = Column(DateTime, nullable=True)
+    last_used_at = Column(DateTime, nullable=True)
+    invocation_count = Column(Integer, default=0, nullable=False)
 
     request = relationship("AccessRequest", back_populates="grant")
 

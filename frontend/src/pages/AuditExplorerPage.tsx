@@ -77,7 +77,7 @@ export const AuditExplorerPage: React.FC = () => {
           {verificationResult && (
             <div
               className={`badge ${verificationResult.valid ? 'badge-active' : 'badge-revoked'}`}
-              style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', fontWeight: 700 }}
+              style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', fontWeight: 800 }}
               id="audit-verify-badge"
             >
               {verificationResult.valid ? (
@@ -107,10 +107,10 @@ export const AuditExplorerPage: React.FC = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Filter size={15} color="#94a3b8" />
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1' }}>Filters:</span>
+          <Filter size={15} color="var(--accent-primary)" />
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Filters:</span>
         </div>
 
         <select
@@ -135,66 +135,74 @@ export const AuditExplorerPage: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: '#94a3b8' }}>Loading chained audit log...</p>
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
+          <p style={{ color: 'var(--text-secondary)' }}>Loading chained audit log...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: '#94a3b8' }}>No audit events found matching the filter.</p>
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
+          <p style={{ color: 'var(--text-secondary)' }}>No audit events found matching the filter.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {filteredEvents.map((ev) => {
             const isExpanded = expandedSeq === ev.seq;
-            let typeColor = '#38bdf8';
-            if (ev.event_type.includes('TAMPER') || ev.event_type.includes('FAILURE')) typeColor = '#f43f5e';
-            if (ev.event_type.includes('GRANT') || ev.event_type.includes('APPROVED')) typeColor = '#10b981';
-            if (ev.event_type.includes('REVOKE') || ev.event_type.includes('NARROW')) typeColor = '#f59e0b';
+            let typeColor = 'var(--accent-cyan)';
+            let badgeStyle = { background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' };
+            if (ev.event_type.includes('TAMPER') || ev.event_type.includes('FAILURE') || ev.event_type.includes('DENIED')) {
+              typeColor = 'var(--accent-rose)';
+              badgeStyle = { background: '#fff1f2', color: '#9f1239', border: '1px solid #fecdd3' };
+            } else if (ev.event_type.includes('GRANT') || ev.event_type.includes('APPROVED') || ev.event_type.includes('ALLOWED')) {
+              typeColor = 'var(--accent-emerald)';
+              badgeStyle = { background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' };
+            } else if (ev.event_type.includes('REVOKE') || ev.event_type.includes('NARROW')) {
+              typeColor = 'var(--accent-amber)';
+              badgeStyle = { background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' };
+            }
 
             return (
               <div
                 key={ev.seq}
                 className="glass-panel"
-                style={{ padding: '1rem 1.25rem', cursor: 'pointer' }}
+                style={{ padding: '1rem 1.25rem', cursor: 'pointer', background: '#ffffff', border: '1px solid var(--border-subtle)' }}
                 onClick={() => toggleExpand(ev.seq)}
                 id={`audit-event-${ev.seq}`}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    {isExpanded ? <ChevronDown size={16} color="#94a3b8" /> : <ChevronRight size={16} color="#94a3b8" />}
-                    <span className="badge font-mono" style={{ background: '#1e293b', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {isExpanded ? <ChevronDown size={16} color="var(--text-secondary)" /> : <ChevronRight size={16} color="var(--text-secondary)" />}
+                    <span className="badge font-mono" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
                       #{ev.seq}
                     </span>
                     <span
                       className="badge font-mono"
-                      style={{ background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}50` }}
+                      style={badgeStyle}
                     >
                       {ev.event_type}
                     </span>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                      Actor: <strong style={{ color: '#fff' }}>{ev.actor_id}</strong>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      Actor: <strong style={{ color: 'var(--text-primary)' }}>{ev.actor_id}</strong>
                     </span>
                     {ev.resource_id && (
-                      <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                        Resource: <span className="font-mono">{ev.resource_id}</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Resource: <span className="font-mono" style={{ color: 'var(--text-primary)' }}>{ev.resource_id}</span>
                       </span>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     <span>{new Date(ev.recorded_at).toLocaleString()}</span>
                   </div>
                 </div>
 
                 {/* Chained Hash previews */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.72rem', color: '#64748b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <Hash size={12} />
-                    <span>Hash: <span className="font-mono" style={{ color: '#94a3b8' }}>{ev.hash?.slice(0, 16)}...</span></span>
+                    <span>Hash: <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>{ev.hash?.slice(0, 16)}...</span></span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <Link2 size={12} />
-                    <span>Prev: <span className="font-mono" style={{ color: '#94a3b8' }}>{ev.prev_hash?.slice(0, 16)}...</span></span>
+                    <span>Prev: <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>{ev.prev_hash?.slice(0, 16)}...</span></span>
                   </div>
                 </div>
 
@@ -203,18 +211,18 @@ export const AuditExplorerPage: React.FC = () => {
                   <div
                     style={{
                       marginTop: '1rem',
-                      background: 'rgba(15, 23, 42, 0.9)',
+                      background: 'var(--bg-secondary)',
                       border: '1px solid var(--border-subtle)',
                       padding: '1rem',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: '0.8rem',
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div style={{ marginBottom: '0.5rem', color: '#94a3b8', fontWeight: 600 }}>
+                    <div style={{ marginBottom: '0.5rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
                       Complete Canonical Audit Record:
                     </div>
-                    <pre className="font-mono" style={{ background: '#00000050', padding: '0.75rem', borderRadius: '6px', overflowX: 'auto', color: '#e2e8f0' }}>
+                    <pre className="font-mono" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '0.75rem', borderRadius: '6px', overflowX: 'auto', color: 'var(--text-primary)', margin: 0 }}>
                       {JSON.stringify(ev, null, 2)}
                     </pre>
                   </div>

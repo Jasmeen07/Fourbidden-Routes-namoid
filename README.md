@@ -24,8 +24,50 @@ NamoID product, security recommendation, or endorsement.
 - **Contributor:** Jasmeen07
 - **Repository URL:** https://github.com/Jasmeen07/Fourbidden-Routes-namoid
 - **Live demo:** http://localhost:5173
-- **Final commit:** `388e3201d1490b0e7179fcd782dd4b37aeb38898`
+- **Final commit:** `c9ef249934878b4ea377ea694d2d7aba4fe79e1e`
 - **License:** MIT
+
+---
+
+## 🌟 The Five Complementary Innovations (NamoID Updated Proposal)
+
+GrantGate preserves all mandatory zero-trust governance guarantees (compulsory 3-role approvals, strict Separation of Duties, and append-only cryptographic audit logging) while introducing **Five High-Impact Complementary Innovations**:
+
+1. **Innovation 1: Intelligent Risk Scoring & Approval Recommendations**
+   - Multi-factor risk engine computing an explainable **0–100 Risk Score** categorized into Low, Medium, High, and Critical bands.
+   - Transparent factor weight attribution showing exact risk additions.
+   - Counterfactual search recommending actionable limit reductions (e.g. shortening duration or capping records) to de-escalate risk tiers.
+
+2. **Innovation 2: Smart Approval Queue & Priority Management**
+   - Dual-axis prioritization balancing **Urgency vs. Risk** to rank review backlogs.
+   - Dynamic SLA countdown timers and waiting-time starvation escalations preventing high-urgency requests from idling.
+   - **Approval Bottleneck Detection** analytics (`GET /api/requests/analytics/bottlenecks`) identifying pipeline delays across Manager, Risk Reviewer, and Resource Owner stages.
+
+3. **Innovation 3: Intelligent Approval Assistance**
+   - Role-tailored contextual evaluation briefs inside the Decision Drawer:
+     - **Manager:** Business justification, need-to-know, and deliverable alignment.
+     - **Risk Reviewer:** Sensitivity classification, control effectiveness, and privilege minimization.
+     - **Resource Owner:** Dataset/model blast radius, contention, and operational suitability.
+   - **Decision Lineage Tracking:** Chronological visibility into prior approvers' decisions, rationales, and scope narrowing.
+
+4. **Innovation 4: Purpose-Bound Access Enforcement & Violation Detection**
+   - Real-time Policy Enforcement Point (PEP) validating that runtime operations match the specific approved purpose and action sets.
+   - Unauthorized actions or purpose mismatches trigger instant denials (`DENY_PURPOSE_MISMATCH`), security audit events, and notifications to resource owners.
+   - Interactive PEP Simulator with 1-click preset test scenarios (Legitimate, Purpose Mismatch, Scope Exceeded, Zombie Access) and live violation stream.
+
+5. **Innovation 5: Smart Access Utilization & Early Revocation**
+   - Active tracking of grant invocations and `last_used_at` timestamps on every gateway invocation.
+   - Dynamic dormancy classification (`ACTIVE_UTILIZING`, `REVIEW_SUGGESTED`, `NEVER_USED`).
+   - **Proactive Early Release:** Enables requesters to self-release access upon project completion (`POST /api/grants/{id}/release-early`), actively reducing corporate attack surface and idle privilege exposure.
+
+---
+
+## 🎨 Warm Beige & Sand Executive Redesign
+
+GrantGate features an executive-ready, warm light aesthetic designed for clarity and governance oversight:
+- **Warm Beige & Porcelain Theme:** Crafted with `--bg-primary: #fbf9f4`, sand backgrounds (`#f4efe6`), crisp white panels (`#ffffff`), and terracotta brand accents (`#c2410c`).
+- **High-Contrast Typography & Indicators:** Eliminates eye strain with readable dark slate text, forest sage success badges, warm amber warning chips, and clear status badges.
+- **Responsive Governance Dashboard:** KPI metrics overview, real-time countdown timers, interactive sliders for monotonic narrowing, and structured RFC 9457 Problem Details modals.
 
 ---
 
@@ -60,8 +102,8 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## 🧪 Verification & Test Suite
 
-### Run All 71 Backend Tests
-Includes all unit tests, database trigger guards, property-based tests (Hypothesis), security tests, and the **4 mandatory challenge scenarios**:
+### Run All 75 Backend Tests
+Includes all unit tests, database trigger guards, property-based tests (Hypothesis), security tests, the **4 mandatory challenge scenarios**, and the **innovations test suite**:
 ```bash
 py -3.13 -m pytest backend/tests -v
 ```
@@ -112,8 +154,8 @@ Exports byte-identical sample history to `docs/sample_access_history.json` and `
 │   │   ├── db/              # SQLAlchemy models, SQLite WAL engine, 7 triggers
 │   │   ├── domain/          # Pure core: limits algebra, SoD, effective status, PDP, hashing
 │   │   └── services/        # Request lifecycle, reviews, grants, audit, PEP gateway
-│   └── tests/               # 71 tests (unit, property, db triggers, security, API)
-├── frontend/                # Vite + React + TypeScript SPA
+│   └── tests/               # 75 tests (unit, property, db triggers, security, API, innovations)
+├── frontend/                # Vite + React + TypeScript SPA (Warm Beige Palette)
 │   ├── src/
 │   │   ├── components/      # SafetyBanner, Navbar, LimitsDiff, RiskLensCard, DecisionDrawer, TraceViewer
 │   │   ├── pages/           # Catalog, NewRequest, Requests, Reviews, Grants, Simulator, Audit, Policy

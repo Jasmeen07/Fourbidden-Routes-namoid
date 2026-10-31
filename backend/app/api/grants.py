@@ -131,6 +131,39 @@ def revoke_grant(
     }
 
 
+@router.post("/{grant_id}/release-early", dependencies=[Depends(verify_csrf)])
+def release_grant_early(
+    grant_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """Innovation 5: Smart Access Utilization - Requester releases active grant early."""
+    clock = getattr(request.app.state, "clock", None)
+    now = clock.now() if clock else datetime.now(timezone.utc)
+    policy = request.app.state.policy
+
+    grant = GrantsService.revoke_grant(
+        db=db,
+        policy=policy,
+        grant_id=grant_id,
+        revoker_sub=user.sub,
+        reason_code="PURPOSE_COMPLETE",
+        emergency=False,
+        note="Released early by requester upon task completion (Innovation 5).",
+        now=now,
+    )
+    db.commit()
+
+    return {
+        "id": grant.id,
+        "status": "REVOKED",
+        "released_early": True,
+        "revoked_at": grant.revoked_at.isoformat(),
+        "revoked_by_sub": grant.revoked_by_sub,
+    }
+
+
 # EC-G03: Explicit 405 on mutating grants directly (tamper attempt)
 @router.api_route("/{grant_id}", methods=["PUT", "PATCH", "DELETE"])
 def block_grant_tampering(

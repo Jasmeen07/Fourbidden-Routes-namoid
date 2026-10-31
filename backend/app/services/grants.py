@@ -18,6 +18,26 @@ class GrantsService:
     @staticmethod
     def get_grant_with_effective_status(grant: Grant, now: datetime) -> dict:
         eff_status = compute_effective_status(grant, now)
+
+        # Innovation 5: Smart Access Utilization
+        inv_count = getattr(grant, "invocation_count", 0) or 0
+        last_used = getattr(grant, "last_used_at", None)
+
+        if eff_status.value != "ACTIVE":
+            util_status = eff_status.value
+        elif inv_count == 0:
+            util_status = "NEVER_USED"
+        elif last_used:
+            lu_dt = last_used if last_used.tzinfo else last_used.replace(tzinfo=timezone.utc)
+            now_dt = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+            hours_since_use = (now_dt - lu_dt).total_seconds() / 3600.0
+            if hours_since_use > 24:
+                util_status = "REVIEW_SUGGESTED"
+            else:
+                util_status = "ACTIVE_UTILIZING"
+        else:
+            util_status = "ACTIVE_UTILIZING"
+
         return {
             "id": grant.id,
             "request_id": grant.request_id,
@@ -33,6 +53,9 @@ class GrantsService:
             "revoked_by_sub": grant.revoked_by_sub,
             "revoke_reason_code": grant.revoke_reason_code,
             "revoke_emergency": grant.revoke_emergency,
+            "last_used_at": last_used.isoformat() if last_used else None,
+            "invocation_count": inv_count,
+            "utilization_status": util_status,
         }
 
     @staticmethod

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Resource, ResourceLimits, RiskLensEvaluation } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { RiskLensCard } from '../components/RiskLensCard';
-import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, FileCode } from 'lucide-react';
+import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, FileCode, Sparkles } from 'lucide-react';
 
 const SECRET_PATTERNS = [
   /sk-[a-zA-Z0-9_-]{20,}/i,
@@ -171,14 +171,14 @@ export const NewRequestPage: React.FC = () => {
 
       <div className="grid-2">
         {/* Left Form */}
-        <form onSubmit={handleSubmit} className="glass-panel" id="request-form">
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', marginBottom: '1.25rem' }}>
+        <form onSubmit={handleSubmit} className="glass-panel" id="request-form" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1.25rem' }}>
             Request Parameters
           </h3>
 
           {/* 1. Resource Selector */}
           <div className="form-group">
-            <label className="form-label" htmlFor="resource-select">Target Governed Resource</label>
+            <label className="form-label" htmlFor="resource-select" style={{ color: 'var(--text-primary)' }}>Target Governed Resource</label>
             <select
               id="resource-select"
               className="form-select"
@@ -196,8 +196,8 @@ export const NewRequestPage: React.FC = () => {
           {/* 2. Duration Slider */}
           <div className="form-group">
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <label className="form-label" htmlFor="duration-slider">Duration (Hours)</label>
-              <span className="font-mono" style={{ color: '#818cf8', fontWeight: 700 }}>
+              <label className="form-label" htmlFor="duration-slider" style={{ color: 'var(--text-primary)' }}>Duration (Hours)</label>
+              <span className="font-mono" style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>
                 {durationHours} hours
               </span>
             </div>
@@ -208,13 +208,13 @@ export const NewRequestPage: React.FC = () => {
               max={selectedResource?.max_duration_hours || 72}
               value={durationHours}
               onChange={(e) => setDurationHours(Number(e.target.value))}
-              style={{ width: '100%', accentColor: '#6366f1' }}
+              style={{ width: '100%', accentColor: 'var(--accent-primary)' }}
             />
           </div>
 
           {/* 3. Purpose */}
           <div className="form-group">
-            <label className="form-label" htmlFor="purpose-select">Declared Business Purpose</label>
+            <label className="form-label" htmlFor="purpose-select" style={{ color: 'var(--text-primary)' }}>Declared Business Purpose</label>
             <select
               id="purpose-select"
               className="form-select"
@@ -229,7 +229,7 @@ export const NewRequestPage: React.FC = () => {
 
           {/* 4. Justification */}
           <div className="form-group">
-            <label className="form-label" htmlFor="justification-input">Accountable Justification</label>
+            <label className="form-label" htmlFor="justification-input" style={{ color: 'var(--text-primary)' }}>Accountable Justification</label>
             <textarea
               id="justification-input"
               className="form-textarea"
@@ -250,13 +250,13 @@ export const NewRequestPage: React.FC = () => {
           </div>
 
           {/* 5. Limits Bounds */}
-          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#94a3b8', marginTop: '1.25rem', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-secondary)', marginTop: '1.25rem', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Resource Limits Specification
           </h4>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
-              <label className="form-label" htmlFor="max-records-input">Max Records</label>
+              <label className="form-label" htmlFor="max-records-input" style={{ color: 'var(--text-primary)' }}>Max Records</label>
               <input
                 id="max-records-input"
                 type="number"
@@ -268,7 +268,7 @@ export const NewRequestPage: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label" htmlFor="max-rps-input">Max RPS (Rate Limit)</label>
+              <label className="form-label" htmlFor="max-rps-input" style={{ color: 'var(--text-primary)' }}>Max RPS (Rate Limit)</label>
               <input
                 id="max-rps-input"
                 type="number"
@@ -281,7 +281,7 @@ export const NewRequestPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="ip-allowlist-input">Client IP / CIDR Allowlist</label>
+            <label className="form-label" htmlFor="ip-allowlist-input" style={{ color: 'var(--text-primary)' }}>Client IP / CIDR Allowlist</label>
             <input
               id="ip-allowlist-input"
               type="text"
@@ -295,10 +295,10 @@ export const NewRequestPage: React.FC = () => {
           {/* 6. Required Controls Acknowledgement */}
           {selectedResource?.required_controls && selectedResource.required_controls.length > 0 && (
             <div className="form-group">
-              <label className="form-label">Mandatory Control Acknowledgements</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(15,23,42,0.6)', padding: '0.75rem', borderRadius: '8px' }}>
+              <label className="form-label" style={{ color: 'var(--text-primary)' }}>Mandatory Control Acknowledgements</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                 {selectedResource.required_controls.map((ctrl) => (
-                  <label key={ctrl} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                  <label key={ctrl} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                     <input
                       type="checkbox"
                       checked={acknowledgedControls.includes(ctrl)}
@@ -309,6 +309,7 @@ export const NewRequestPage: React.FC = () => {
                           setAcknowledgedControls(acknowledgedControls.filter((c) => c !== ctrl));
                         }
                       }}
+                      style={{ accentColor: 'var(--accent-primary)' }}
                     />
                     <span className="font-mono">{ctrl}</span>
                   </label>
@@ -343,18 +344,18 @@ export const NewRequestPage: React.FC = () => {
             }}
           />
 
-          <div className="glass-panel" style={{ marginTop: '1.25rem' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Shield size={16} color="#818cf8" />
+          <div className="glass-panel" style={{ marginTop: '1.25rem', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Shield size={16} color="var(--accent-primary)" />
               <span>Multi-Party Approval Routing</span>
             </h4>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
               Upon submission, GrantGate will automatically route this request through policy-governed review slots based on resource criticality:
             </p>
-            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div>• <strong>Tier 1 Critical:</strong> 3 sequential slots (Data Gov → Security Admin → Executive CISO)</div>
-              <div>• <strong>Tier 2 Sensitive:</strong> 2 sequential slots (Data Gov → Security Admin)</div>
-              <div>• <strong>Tier 3 Standard:</strong> 1 review slot (Data Gov)</div>
+            <div style={{ fontSize: '0.825rem', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div>&bull; <strong>Tier 1 Critical:</strong> 3 sequential slots (Manager &rarr; Risk Reviewer &rarr; Resource Owner)</div>
+              <div>&bull; <strong>Tier 2 Sensitive:</strong> 2 sequential slots (Manager &rarr; Risk Reviewer)</div>
+              <div>&bull; <strong>Tier 3 Standard:</strong> 1 review slot (Manager)</div>
             </div>
           </div>
         </div>

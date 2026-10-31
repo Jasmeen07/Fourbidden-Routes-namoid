@@ -91,13 +91,13 @@ export const PolicyLinterPage: React.FC = () => {
       <div className="grid-2">
         {/* Left: Linter Report & Findings */}
         <div>
-          <div className="glass-panel" style={{ marginBottom: '1.5rem' }}>
+          <div className="glass-panel" style={{ marginBottom: '1.5rem', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                 Linter Assessment Summary
               </h3>
               {report && (
-                <span className={`badge ${report.is_valid ? 'badge-active' : 'badge-revoked'}`} style={{ fontWeight: 700 }}>
+                <span className={`badge ${report.is_valid ? 'badge-active' : 'badge-revoked'}`} style={{ fontWeight: 800 }}>
                   {report.is_valid ? 'ASSURANCE VERIFIED' : 'ACTION REQUIRED'}
                 </span>
               )}
@@ -105,26 +105,32 @@ export const PolicyLinterPage: React.FC = () => {
 
             {report ? (
               <div>
-                <p style={{ fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '1rem' }}>
-                  Policy version: <strong className="font-mono">{report.version}</strong> | Checked at: <span className="font-mono">{new Date(report.checked_at).toLocaleTimeString()}</span>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                  Policy version: <strong className="font-mono" style={{ color: 'var(--text-primary)' }}>{report.version}</strong> | Checked at: <span className="font-mono">{new Date(report.checked_at).toLocaleTimeString()}</span>
                 </p>
 
                 {report.findings.length === 0 ? (
-                  <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', color: '#a7f3d0', fontSize: '0.85rem' }}>
+                  <div style={{ padding: '1rem', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 'var(--radius-md)', color: '#065f46', fontSize: '0.85rem' }}>
                     <CheckCircle2 size={18} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
                     Zero policy violations found. All tiers map to valid review slots and enforce strict Separation of Duties.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {report.findings.map((f, i) => {
-                      let icon = <CheckCircle2 size={16} color="#38bdf8" />;
-                      let color = '#38bdf8';
+                      let icon = <CheckCircle2 size={16} color="var(--accent-cyan)" />;
+                      let color = 'var(--accent-cyan)';
+                      let bg = '#f0f9ff';
+                      let border = '#bae6fd';
                       if (f.level === 'WARN') {
-                        icon = <AlertTriangle size={16} color="#f59e0b" />;
-                        color = '#f59e0b';
+                        icon = <AlertTriangle size={16} color="var(--accent-amber)" />;
+                        color = 'var(--accent-amber)';
+                        bg = '#fffbeb';
+                        border = '#fde68a';
                       } else if (f.level === 'ERROR') {
-                        icon = <XCircle size={16} color="#f43f5e" />;
-                        color = '#f43f5e';
+                        icon = <XCircle size={16} color="var(--accent-rose)" />;
+                        color = 'var(--accent-rose)';
+                        bg = '#fff1f2';
+                        border = '#fecdd3';
                       }
 
                       return (
@@ -132,9 +138,9 @@ export const PolicyLinterPage: React.FC = () => {
                           key={i}
                           style={{
                             padding: '0.75rem',
-                            background: 'rgba(15, 23, 42, 0.7)',
-                            border: `1px solid ${color}40`,
-                            borderRadius: '8px',
+                            background: bg,
+                            border: `1px solid ${border}`,
+                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
                             alignItems: 'flex-start',
                             gap: '0.65rem',
@@ -143,12 +149,12 @@ export const PolicyLinterPage: React.FC = () => {
                           {icon}
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span className="badge font-mono" style={{ background: `${color}20`, color: color, fontSize: '0.68rem' }}>
+                              <span className="badge font-mono" style={{ background: '#ffffff', color: color, fontSize: '0.68rem', border: `1px solid ${border}` }}>
                                 {f.code}
                               </span>
-                              {f.path && <span className="font-mono" style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{f.path}</span>}
+                              {f.path && <span className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{f.path}</span>}
                             </div>
-                            <p style={{ fontSize: '0.82rem', color: '#cbd5e1', marginTop: '0.25rem' }}>
+                            <p style={{ fontSize: '0.825rem', color: 'var(--text-primary)', marginTop: '0.25rem', margin: 0 }}>
                               {f.message}
                             </p>
                           </div>
@@ -159,23 +165,23 @@ export const PolicyLinterPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <p style={{ color: '#94a3b8' }}>Running static checks...</p>
+              <p style={{ color: 'var(--text-secondary)' }}>Running static checks...</p>
             )}
           </div>
 
           {/* What-If Routing Simulator */}
-          <div className="glass-panel">
-            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Shield size={16} color="#818cf8" />
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
+            <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Shield size={16} color="var(--accent-primary)" />
               <span>What-If Routing Simulator</span>
             </h4>
-            <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Simulate dynamic slot assignment for hypothetical requests under active policy rules.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div className="form-group">
-                <label className="form-label">Resource</label>
+                <label className="form-label" style={{ color: 'var(--text-primary)' }}>Resource</label>
                 <select
                   className="form-select"
                   value={simResource}
@@ -190,7 +196,7 @@ export const PolicyLinterPage: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Requester Role</label>
+                <label className="form-label" style={{ color: 'var(--text-primary)' }}>Requester Role</label>
                 <select
                   className="form-select"
                   value={simRole}
@@ -205,15 +211,15 @@ export const PolicyLinterPage: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-              <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+            <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem', margin: 0 }}>
                 Generated Sequential Slots:
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.4rem' }}>
                 {routingPreview.map((slotStr, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#38bdf8' }}>
-                    <ArrowRight size={13} color="#6366f1" />
-                    <span className="font-mono">{slotStr}</span>
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.825rem', color: 'var(--text-primary)' }}>
+                    <ArrowRight size={13} color="var(--accent-primary)" />
+                    <span className="font-mono" style={{ fontWeight: 600 }}>{slotStr}</span>
                   </div>
                 ))}
               </div>
@@ -222,24 +228,25 @@ export const PolicyLinterPage: React.FC = () => {
         </div>
 
         {/* Right: Policy YAML Preview */}
-        <div className="glass-panel">
+        <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-            <BookOpen size={18} color="#818cf8" />
-            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff' }}>
+            <BookOpen size={18} color="var(--accent-primary)" />
+            <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
               Active Policy-as-Code (config/policy.yaml)
             </h4>
           </div>
           <pre
             className="font-mono"
             style={{
-              background: 'rgba(15, 23, 42, 0.9)',
+              background: 'var(--bg-secondary)',
               padding: '1rem',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)',
-              fontSize: '0.78rem',
-              color: '#cbd5e1',
+              fontSize: '0.8rem',
+              color: 'var(--text-primary)',
               maxHeight: '520px',
               overflowY: 'auto',
+              margin: 0,
             }}
           >
             {rawYaml || '# Loading policy configuration...'}

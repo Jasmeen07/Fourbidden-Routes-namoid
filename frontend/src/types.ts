@@ -64,6 +64,7 @@ export interface Grant {
   request_id: string;
   subject_id: string;
   subject_name?: string;
+  requester_sub?: string;
   resource_id: string;
   resource_name?: string;
   resource_tier?: ResourceTier;
@@ -76,6 +77,46 @@ export interface Grant {
   revoked_at?: string;
   revocation_reason?: string;
   is_emergency?: boolean;
+  last_used_at?: string;
+  invocation_count?: number;
+  utilization_status?: 'ACTIVE_UTILIZING' | 'REVIEW_SUGGESTED' | 'NEVER_USED';
+}
+
+export interface RoleGuidance {
+  title: string;
+  focus_areas: string[];
+  key_questions: string[];
+}
+
+export interface DecisionLineageItem {
+  slot_role: string;
+  decided_by_sub: string;
+  status: string;
+  decision: string;
+  approved_limits?: ResourceLimits;
+  rationale?: string;
+  decided_at?: string;
+}
+
+export interface RequestPriority {
+  score: number;
+  band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  waiting_hours: number;
+  sla_hours_remaining: number;
+  is_starved: boolean;
+  reasons: string[];
+}
+
+export interface ApprovalAssistanceData {
+  request_id: string;
+  resource_name: string;
+  resource_tier: string;
+  risk_score: number;
+  risk_band: string;
+  priority?: RequestPriority;
+  guidance: Record<string, RoleGuidance>;
+  lineage: DecisionLineageItem[];
+  suggestions: Array<{ action?: string; description?: string; target_field?: string; suggested_value?: any }>;
 }
 
 export interface AuditEvent {

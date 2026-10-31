@@ -13,20 +13,20 @@ export const ProblemModal: React.FC = () => {
 
   return (
     <div className="modal-overlay" onClick={clearProblem} id="problem-modal">
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ background: 'rgba(244, 63, 94, 0.2)', padding: '0.4rem', borderRadius: '8px', color: '#f43f5e' }}>
+            <div style={{ background: '#fee2e2', padding: '0.45rem', borderRadius: '8px', color: 'var(--accent-rose)' }}>
               <AlertTriangle size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>Policy & Security Guard</h3>
-              <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>RFC 9457 Problem Details</p>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Policy & Security Guard</h3>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>RFC 9457 Problem Details</p>
             </div>
           </div>
           <button
             onClick={clearProblem}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
           >
             <X size={20} />
           </button>
@@ -38,15 +38,15 @@ export const ProblemModal: React.FC = () => {
               {code}
             </span>
           </div>
-          <p style={{ color: '#f1f5f9', fontSize: '0.95rem', lineHeight: 1.6 }}>
+          <p style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
             {message}
           </p>
         </div>
 
         {violations.length > 0 && (
-          <div style={{ background: 'rgba(15, 23, 42, 0.8)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid rgba(244, 63, 94, 0.25)', marginBottom: '1.25rem' }}>
-            <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f87171', marginBottom: '0.4rem' }}>Violations Detected:</p>
-            <ul style={{ paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+          <div style={{ background: '#fff1f2', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #fecdd3', marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#9f1239', marginBottom: '0.4rem', margin: '0 0 0.4rem 0' }}>Violations Detected:</p>
+            <ul style={{ paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#be123c', margin: 0 }}>
               {violations.map((v, idx) => (
                 <li key={idx}>{v}</li>
               ))}

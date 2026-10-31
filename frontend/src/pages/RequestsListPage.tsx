@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AccessRequest, RequestStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { LimitsDiff } from '../components/LimitsDiff';
-import { Plus, Clock, CheckCircle2, XCircle, AlertCircle, Ban, ArrowRight, Shield } from 'lucide-react';
+import { Plus, Clock, CheckCircle2, XCircle, AlertCircle, Ban, ArrowRight, Shield, Flame } from 'lucide-react';
 
 export const RequestsListPage: React.FC = () => {
   const { apiFetch, user } = useAuth();
@@ -91,11 +91,11 @@ export const RequestsListPage: React.FC = () => {
 
       {isLoading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: '#94a3b8' }}>Loading requests...</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Loading requests...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>No access requests found matching the filter.</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>No access requests found matching the filter.</p>
           <button className="btn btn-secondary" onClick={() => navigate('/catalog')}>
             Explore Catalog
           </button>
@@ -104,23 +104,31 @@ export const RequestsListPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {filtered.map((req) => {
             const isOpen = req.status === 'IN_REVIEW' || req.status === 'BLOCKED';
+            const priority = (req as any).priority;
+
             return (
-              <div key={req.id} className="glass-panel" id={`request-card-${req.id}`}>
+              <div key={req.id} className="glass-panel" id={`request-card-${req.id}`} style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                         {req.resource_name || req.resource_id}
                       </h3>
                       {getStatusBadge(req.status)}
-                      <span className="badge font-mono" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8', fontSize: '0.7rem' }}>
+                      {priority && (
+                        <span className={`priority-badge priority-${priority.band?.toLowerCase()}`}>
+                          {priority.band === 'CRITICAL' && <Flame size={12} />}
+                          <span>{priority.band} (Score: {priority.score || priority.priority_score})</span>
+                        </span>
+                      )}
+                      <span className="badge font-mono" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '0.7rem', border: '1px solid var(--border-subtle)' }}>
                         {req.id.slice(0, 8)}...
                       </span>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: '0.2rem 0' }}>
                       <strong>Purpose:</strong> {req.purpose}
                     </p>
-                    <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                    <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginTop: '0.2rem', margin: 0 }}>
                       <strong>Justification:</strong> {req.justification}
                     </p>
                   </div>
@@ -141,25 +149,26 @@ export const RequestsListPage: React.FC = () => {
 
                 {/* Multi-Slot Review Stepper */}
                 <div style={{ marginBottom: '1rem' }}>
-                  <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
                     Multi-Party Review Slots
                   </p>
                   <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     {req.slots.map((s) => {
-                      let slotColor = '#3b82f6';
-                      let statusText = s.status;
-                      if (s.status === 'APPROVED') slotColor = '#10b981';
-                      if (s.status === 'NARROWED') slotColor = '#f59e0b';
-                      if (s.status === 'REJECTED') slotColor = '#f43f5e';
+                      let slotColor = 'var(--accent-primary)';
+                      let badgeClass = 'badge-in-review';
+                      if (s.status === 'APPROVED') { slotColor = 'var(--accent-emerald)'; badgeClass = 'badge-active'; }
+                      if (s.status === 'NARROWED') { slotColor = 'var(--accent-amber)'; badgeClass = 'badge-tier-sensitive'; }
+                      if (s.status === 'REJECTED') { slotColor = 'var(--accent-rose)'; badgeClass = 'badge-revoked'; }
 
                       return (
                         <div
                           key={s.id}
                           style={{
                             padding: '0.5rem 0.85rem',
-                            background: 'rgba(15, 23, 42, 0.7)',
-                            border: `1px solid ${slotColor}50`,
-                            borderRadius: '8px',
+                            background: 'var(--bg-secondary)',
+                            border: `1px solid var(--border-subtle)`,
+                            borderLeft: `4px solid ${slotColor}`,
+                            borderRadius: 'var(--radius-md)',
                             fontSize: '0.8rem',
                             display: 'flex',
                             flexDirection: 'column',
@@ -167,14 +176,14 @@ export const RequestsListPage: React.FC = () => {
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                            <span style={{ fontWeight: 700, color: '#e2e8f0' }}>Slot {s.slot_index + 1}: {s.required_role}</span>
-                            <span className="font-mono" style={{ color: slotColor, fontWeight: 700, fontSize: '0.75rem' }}>
-                              {statusText}
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Slot {s.slot_index + 1}: {s.required_role}</span>
+                            <span className={`badge ${badgeClass} font-mono`} style={{ fontSize: '0.7rem' }}>
+                              {s.status}
                             </span>
                           </div>
                           {s.decision_rationale && (
-                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                              Rationale: {s.decision_rationale}
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                              "{s.decision_rationale}"
                             </span>
                           )}
                         </div>

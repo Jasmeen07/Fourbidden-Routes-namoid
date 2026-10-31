@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from app.db.models import Grant, User
+from app.db.models import Grant, User, Resource, Notification
+from app.ids import generate_id
 from app.domain.pdp import (
     evaluate_access,
     SubjectContext,
@@ -89,6 +90,8 @@ class SimulationGateway:
 
         # 5. Record audit event inside transaction
         event_type = "ACCESS_ALLOWED" if decision.allow else "ACCESS_DENIED"
+        is_violation = decision.code in ["DENY_PURPOSE_MISMATCH", "DENY_ACTION_NOT_GRANTED"]
+
         audit_payload = {
             "resource_id": resource_id,
             "action": action,
@@ -96,6 +99,8 @@ class SimulationGateway:
             "grant_id": grant_ctx.id if grant_ctx else None,
             "decision_code": decision.code,
         }
+        if is_violation:
+            audit_payload["violation"] = True
 
         AuditService.append_event(
             session=db,
@@ -109,12 +114,31 @@ class SimulationGateway:
 
         output = None
         if decision.allow:
+            # Innovation 5: Update utilization on grant
+            if grant_row:
+                grant_row.last_used_at = current_time
+                grant_row.invocation_count = (grant_row.invocation_count or 0) + 1
+                db.flush()
             output = execute_mock_resource_action(resource_id, action)
+        elif is_violation:
+            # Innovation 4: Purpose-Bound Violation Detection & Security Notification
+            resource = db.get(Resource, resource_id)
+            if resource and resource.owner_sub:
+                db.add(Notification(
+                    id=generate_id("notif"),
+                    to_sub=resource.owner_sub,
+                    kind="POLICY_VIOLATION_ATTEMPT",
+                    ref_id=grant_ctx.id if grant_ctx else resource_id,
+                    message=f"Access violation: User '{caller_sub}' attempted '{action}' on '{resource_id}' with purpose '{declared_purpose}' ({decision.code}).",
+                    created_at=current_time,
+                ))
+                db.flush()
 
         return {
             "decision": {
                 "allow": decision.allow,
                 "code": decision.code,
+                "violation": is_violation,
                 "trace": [
                     {"check_name": t.check_name, "status": t.status, "detail": t.detail}
                     for t in decision.trace

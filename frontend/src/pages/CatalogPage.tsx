@@ -53,11 +53,11 @@ export const CatalogPage: React.FC = () => {
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'MODEL':
-        return <Cpu size={18} color="#38bdf8" />;
+        return <Cpu size={18} color="var(--accent-primary)" />;
       case 'DATASET':
-        return <Database size={18} color="#c084fc" />;
+        return <Database size={18} color="#7c3aed" />;
       default:
-        return <Wrench size={18} color="#34d399" />;
+        return <Wrench size={18} color="#059669" />;
     }
   };
 
@@ -87,50 +87,50 @@ export const CatalogPage: React.FC = () => {
 
       {isLoading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: '#94a3b8' }}>Loading governed resources...</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Loading governed resources...</p>
         </div>
       ) : (
         <div className="grid-catalog">
           {filtered.map((res) => (
-            <div key={res.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div key={res.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {getTypeIcon(res.type)}
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       {res.type}
                     </span>
                   </div>
                   {getTierBadge(res.tier)}
                 </div>
 
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', marginBottom: '0.4rem' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
                   {res.name}
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '1.25rem', minHeight: '40px' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', minHeight: '40px', lineHeight: 1.5 }}>
                   {res.description}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem', fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#cbd5e1' }}>
-                    <span style={{ color: '#94a3b8' }}>Max Duration:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Max Duration:</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600 }}>
                       <Clock size={13} /> {res.max_duration_hours} hours
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#cbd5e1' }}>
-                    <span style={{ color: '#94a3b8' }}>Base Risk Score:</span>
-                    <span className="font-mono" style={{ fontWeight: 700, color: res.risk_score > 60 ? '#f43f5e' : res.risk_score > 30 ? '#f59e0b' : '#10b981' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Base Risk Score:</span>
+                    <span className="font-mono" style={{ fontWeight: 800, color: res.risk_score > 60 ? 'var(--accent-rose)' : res.risk_score > 30 ? 'var(--accent-amber)' : 'var(--accent-emerald)' }}>
                       {res.risk_score} / 100
                     </span>
                   </div>
 
                   <div style={{ marginTop: '0.25rem' }}>
-                    <span style={{ color: '#94a3b8', display: 'block', marginBottom: '0.3rem' }}>Allowed Actions:</span>
+                    <span style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem', fontWeight: 600 }}>Allowed Actions:</span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                       {res.allowed_actions.map((act) => (
-                        <span key={act} className="badge font-mono" style={{ background: 'rgba(255,255,255,0.06)', color: '#e2e8f0', fontSize: '0.7rem' }}>
+                        <span key={act} className="badge font-mono" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.7rem', border: '1px solid var(--border-subtle)' }}>
                           {act}
                         </span>
                       ))}
@@ -139,10 +139,10 @@ export const CatalogPage: React.FC = () => {
 
                   {res.required_controls.length > 0 && (
                     <div style={{ marginTop: '0.25rem' }}>
-                      <span style={{ color: '#94a3b8', display: 'block', marginBottom: '0.3rem' }}>Required Controls:</span>
+                      <span style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem', fontWeight: 600 }}>Required Controls:</span>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                         {res.required_controls.map((ctrl) => (
-                          <span key={ctrl} className="badge font-mono" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', fontSize: '0.7rem' }}>
+                          <span key={ctrl} className="badge font-mono" style={{ background: '#ffedd5', color: 'var(--accent-primary)', fontSize: '0.7rem', border: '1px solid #fed7aa' }}>
                             {ctrl}
                           </span>
                         ))}
