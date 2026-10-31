@@ -1,0 +1,15 @@
+{
+  "name": "namoid-challenge-submission",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "check": "node scripts/validate.mjs",
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

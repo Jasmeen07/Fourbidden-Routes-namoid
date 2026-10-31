@@ -1,9 +1,40 @@
-# GrantGate — Secure AI Model & Dataset Access Governance
+# GrantGate
+
+**[Powered by NamoID](https://namoid.in)** ·
+[NamoID documentation](https://docs.namoid.in) ·
+[Challenge catalog](https://challenges.namoid.in)
+
+> Built on the NamoID identity platform for the **NamoID Community Challenges** program.
+
+This repository is a contributor-owned response to the
+`responsible-ai-access-gate` problem statement. It was created from the official
+[NamoID challenge template](https://github.com/namoidhq/namoid-challenge-template).
+
+This project is an independent community build. It is not an official
+NamoID product, security recommendation, or endorsement.
 
 > **Mandatory Governance Notice:**
 > *"Approval records an accountable decision under stated controls. It does not make use safe. Residual risks remain."*
 
-GrantGate is a role-based, zero-trust access governance platform for enterprise AI models, datasets, and analytical tools. Built to satisfy the NamoID Security & AI Governance Challenge, GrantGate enforces pure mathematical limits algebra, database-level defense-in-depth triggers, sequential multi-party review slots with Separation of Duties (SoD), emergency break-glass revocation, and a tamper-evident SHA-256 hash-chained audit log.
+---
+
+## Community project metadata
+
+- **Challenge ID:** `responsible-ai-access-gate`
+- **Contributor:** Jasmeen07
+- **Repository URL:** https://github.com/Jasmeen07/Fourbidden-Routes-namoid
+- **Live demo:** http://localhost:5173
+- **Final commit:** Pinned at submission time via `git rev-parse HEAD`
+- **License:** MIT
+
+---
+
+## NamoID integration
+
+GrantGate uses **NamoID Hosted Auth as the application's sign-in system**:
+- **Authentication Flows:** Implemented via standard OpenID Connect (OIDC) authorization code flow with PKCE (`S256`) and single-use state/nonce validation in `backend/app/auth/`.
+- **Identity Provider (`backend/app/auth/namoid_provider.py`):** Integrates NamoID Hosted Auth in live environments (`NAMOID_ENV=live`) and spec-faithful mock provider for deterministic automated testing.
+- **Session Management:** OIDC sessions use opaque 48-byte cryptographically random tokens stored hashed (SHA-256) at rest. Upon callback, session IDs are rotated (anti-fixation, EC-A05). State-mutating endpoints enforce `X-CSRF-Token` headers.
 
 ---
 
@@ -33,6 +64,11 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 Includes all unit tests, database trigger guards, property-based tests (Hypothesis), security tests, and the **4 mandatory challenge scenarios**:
 ```bash
 py -3.13 -m pytest backend/tests -v
+```
+
+### Verify Metadata Compliance (NamoID Challenge Validator)
+```bash
+npm run check
 ```
 
 ### Verify 100% Edge Case Coverage (65 / 65)
@@ -94,15 +130,15 @@ Exports byte-identical sample history to `docs/sample_access_history.json` and `
 │   ├── FIRST_REAL_RESOURCE.md # Production onboarding guide for real datasets
 │   ├── sample_access_history.json # Chained sample audit log export
 │   └── sample_access_history.csv  # Chained sample audit log CSV
-└── scripts/
-    ├── check_ec_coverage.py # 65/65 edge case coverage validator
-    ├── seed_demo.py         # Database bootstrap utility
-    ├── gen_sample_history.py # Deterministic audit chain generator
-    └── export_openapi.py    # OpenAPI schema exporter
+├── scripts/
+│   ├── setup.mjs            # Challenge setup script
+│   ├── validate.mjs         # NamoID metadata validator
+│   ├── check_ec_coverage.py # 65/65 edge case coverage validator
+│   ├── seed_demo.py         # Database bootstrap utility
+│   ├── gen_sample_history.py # Deterministic audit chain generator
+│   └── export_openapi.py    # OpenAPI schema exporter
+├── DECISIONS.md             # Architectural & engineering decisions
+├── NOTICE.md                # Attribution and independence notice
+├── LICENSE                  # MIT License
+└── namoid-challenge.json    # Machine-readable submission metadata
 ```
-
----
-
-## 📄 License & Compliance
-
-Built for the **NamoID Security & AI Governance Challenge**. All rights reserved.
