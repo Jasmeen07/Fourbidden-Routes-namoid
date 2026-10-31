@@ -221,3 +221,78 @@ class EventDependency(Base):
     __table_args__ = (
         UniqueConstraint("event_id", "depends_on_id", name="uq_event_dep"),
     )
+
+
+# ---------------------------------------------------------------------------
+# ServiceNow-inspired SecOps Cybersecurity Models
+# ---------------------------------------------------------------------------
+
+class SecurityEvent(Base):
+    """Immutable log of detected suspicious activities, injection attempts, and WAF decisions."""
+    __tablename__ = "security_events"
+
+    id = Column(String(64), primary_key=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    source_ip = Column(String(64), nullable=False, index=True)
+    user_sub = Column(String(128), ForeignKey("users.sub"), nullable=True, index=True)
+    method = Column(String(16), nullable=False)
+    path = Column(String(255), nullable=False)
+    category = Column(String(64), nullable=False)  # 'SQLI', 'XSS', 'COMMAND_INJECTION', 'PATH_TRAVERSAL', 'THREAT_INTEL', 'CLEAN'
+    pattern_matched = Column(String(128), nullable=True)
+    risk_score = Column(Integer, default=0, nullable=False)
+    severity = Column(String(32), default="LOW", nullable=False)  # 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+    action_taken = Column(String(32), nullable=False)  # 'ALLOWED', 'FLAGGED', 'RATE_LIMITED', 'BLOCKED'
+    repeat_count = Column(Integer, default=1, nullable=False)
+    incident_id = Column(String(64), nullable=True, index=True)
+    payload_snippet = Column(Text, nullable=True)
+    status = Column(String(32), default="LOGGED", nullable=False)
+
+
+class SecurityIncident(Base):
+    """ServiceNow SIR-inspired Security Incident Record."""
+    __tablename__ = "security_incidents"
+
+    id = Column(String(64), primary_key=True)  # e.g. 'INC-2026-00101'
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    severity = Column(String(32), nullable=False)  # 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+    priority = Column(String(16), nullable=False)  # 'P1', 'P2', 'P3', 'P4'
+    status = Column(String(32), default="NEW", nullable=False)  # 'NEW', 'INVESTIGATING', 'CONTAINED', 'RESOLVED', 'CLOSED'
+    source_ip = Column(String(64), nullable=True, index=True)
+    user_sub = Column(String(128), ForeignKey("users.sub"), nullable=True, index=True)
+    assigned_to = Column(String(128), ForeignKey("users.sub"), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_notes = Column(Text, nullable=True)
+    investigation_notes = Column(JSON, default=list, nullable=False)
+
+
+class IpReputation(Base):
+    """Dynamic IP threat tracking and WAF restriction state."""
+    __tablename__ = "ip_reputations"
+
+    ip = Column(String(64), primary_key=True)
+    status = Column(String(32), default="CLEAN", nullable=False)  # 'CLEAN', 'FLAGGED', 'RATE_LIMITED', 'TEMP_BLOCKED', 'PERM_BLOCKED', 'ALLOWLISTED'
+    risk_score = Column(Integer, default=0, nullable=False)
+    malicious_attempts = Column(Integer, default=0, nullable=False)
+    last_seen_at = Column(DateTime, nullable=False)
+    blocked_until = Column(DateTime, nullable=True)
+    block_reason = Column(String(255), nullable=True)
+    manual_override = Column(Boolean, default=False, nullable=False)
+
+
+class ThreatIntelIndicator(Base):
+    """External threat intelligence feed IoC repository."""
+    __tablename__ = "threat_intel_indicators"
+
+    id = Column(String(64), primary_key=True)
+    type = Column(String(32), nullable=False)  # 'IP', 'DOMAIN', 'URL', 'HASH'
+    value = Column(String(255), nullable=False, unique=True, index=True)
+    threat_actor = Column(String(128), nullable=True)
+    campaign = Column(String(128), nullable=True)
+    confidence = Column(Integer, default=80, nullable=False)
+    description = Column(Text, nullable=False)
+    added_at = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+

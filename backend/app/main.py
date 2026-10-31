@@ -12,7 +12,7 @@ from app.domain.errors import DomainError
 from app.api.problems import domain_error_handler
 from app.db.engine import init_database, SessionLocal
 from app.services.grants import GrantsService
-from app.api import auth, resources, requests, grants, sim, audit, policy, ops, hierarchy, provenance
+from app.api import auth, resources, requests, grants, sim, audit, policy, ops, hierarchy, provenance, secops
 
 
 @asynccontextmanager
@@ -82,6 +82,47 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # WAF & IP Protection Middleware (ServiceNow SecOps)
+    @app.middleware("http")
+    async def secops_waf_middleware(request: Request, call_next):
+        if request.method == "OPTIONS" or request.url.path in ("/docs", "/openapi.json", "/health"):
+            return await call_next(request)
+
+        # Skip simulation endpoint from auto-blocking so simulator can return structured responses
+        if not request.url.path.startswith("/api/secops/simulate"):
+            from app.services.secops import resolve_client_ip
+            from app.db.engine import SessionLocal
+            from app.db.models import IpReputation
+            from datetime import datetime, timezone
+
+            client_host = request.client.host if request.client else "127.0.0.1"
+            client_ip = resolve_client_ip(client_host, request.headers.get("X-Forwarded-For"))
+
+            db = SessionLocal()
+            try:
+                rep = db.get(IpReputation, client_ip)
+                clock = getattr(request.app.state, "clock", None)
+                now = clock.now() if clock else datetime.now(timezone.utc)
+                if rep and rep.status in ("TEMP_BLOCKED", "PERM_BLOCKED"):
+                    bu = rep.blocked_until
+                    if bu and bu.tzinfo is None:
+                        bu = bu.replace(tzinfo=timezone.utc)
+                    if rep.status == "PERM_BLOCKED" or (bu and bu > now):
+                        return JSONResponse(
+                            status_code=403,
+                            content={
+                                "title": "Access Blocked",
+                                "status": 403,
+                                "code": "DENY_IP_BLOCKED",
+                                "detail": f"Access restricted by SecOps WAF: {rep.block_reason or 'Malicious activity detected from this IP address.'}",
+                            },
+                            media_type="application/problem+json",
+                        )
+            finally:
+                db.close()
+
+        return await call_next(request)
+
     # Problem+JSON error handler
     app.add_exception_handler(DomainError, domain_error_handler)
 
@@ -96,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(ops.router)
     app.include_router(hierarchy.router)
     app.include_router(provenance.router)
+    app.include_router(secops.router)
 
     return app
 

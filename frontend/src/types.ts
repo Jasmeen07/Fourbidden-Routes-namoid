@@ -237,3 +237,93 @@ export interface UserPersona {
   role: string;
   badge: string;
 }
+
+export interface SecurityEvent {
+  id: string;
+  timestamp: string;
+  source_ip: string;
+  user_sub?: string;
+  method: string;
+  path: string;
+  category: string;
+  pattern_matched?: string;
+  risk_score: number;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  action_taken: 'ALLOWED' | 'FLAGGED' | 'RATE_LIMITED' | 'BLOCKED';
+  repeat_count: number;
+  incident_id?: string;
+  payload_snippet?: string;
+  status: string;
+}
+
+export interface SecurityIncident {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  priority: 'P1' | 'P2' | 'P3' | 'P4';
+  status: 'NEW' | 'INVESTIGATING' | 'CONTAINED' | 'RESOLVED' | 'CLOSED';
+  source_ip: string;
+  user_sub?: string;
+  assigned_to?: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+  notes_count?: number;
+  investigation_notes?: {
+    note_id: string;
+    timestamp: string;
+    author: string;
+    text: string;
+  }[];
+  associated_events?: {
+    id: string;
+    timestamp: string;
+    category: string;
+    pattern: string;
+    risk_score: number;
+    severity: string;
+    action: string;
+    path: string;
+  }[];
+}
+
+export interface IpReputation {
+  ip: string;
+  status: 'CLEAN' | 'FLAGGED' | 'TEMP_BLOCKED' | 'PERM_BLOCKED' | 'ALLOWLISTED';
+  risk_score: number;
+  malicious_attempts: number;
+  last_seen_at: string;
+  blocked_until?: string;
+  block_reason?: string;
+  manual_override: boolean;
+}
+
+export interface ThreatIntelIndicator {
+  id: string;
+  type: 'IP' | 'DOMAIN' | 'URL' | 'HASH';
+  value: string;
+  threat_actor?: string;
+  campaign?: string;
+  confidence: number;
+  description: string;
+  added_at: string;
+}
+
+export interface SecOpsSummary {
+  active_incidents: number;
+  blocked_ips: number;
+  total_security_events: number;
+  attacks_detected: number;
+  active_threat_intel_count: number;
+  recent_incidents: {
+    id: string;
+    title: string;
+    severity: string;
+    priority: string;
+    status: string;
+    source_ip: string;
+    created_at: string;
+  }[];
+}
