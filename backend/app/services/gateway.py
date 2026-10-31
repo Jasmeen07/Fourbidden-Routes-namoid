@@ -144,7 +144,14 @@ class SimulationGateway:
 
         # 5. Record audit event inside transaction
         event_type = "ACCESS_ALLOWED" if decision.allow else "ACCESS_DENIED"
-        is_violation = decision.code in ["DENY_PURPOSE_MISMATCH", "DENY_ACTION_NOT_GRANTED"]
+        is_violation = decision.code in [
+            "DENY_PURPOSE_MISMATCH",
+            "DENY_ACTION_NOT_GRANTED",
+            "DENY_REVOKED",
+            "DENY_ACTION_NOT_DELEGATED",
+            "DENY_NETWORK_DESTINATION_NOT_APPROVED",
+            "DENY_TAINTED_EXFILTRATION",
+        ]
 
         audit_payload = {
             "resource_id": resource_id,
@@ -167,6 +174,8 @@ class SimulationGateway:
         )
 
         output = None
+        sn_incident_info = None
+
         if decision.allow:
             # Innovation 5: Update utilization on grant
             if grant_row:
@@ -188,6 +197,31 @@ class SimulationGateway:
                 ))
                 db.flush()
 
+            # Auto-open ServiceNow SIR incident on PDP security violation
+            try:
+                from app.services.servicenow import ServiceNowService
+                sn_incident = ServiceNowService.auto_open_sir_incident(
+                    db=db,
+                    violation_code=decision.code or "UNKNOWN_VIOLATION",
+                    caller_sub=caller_sub,
+                    resource_id=resource_id,
+                    action=action,
+                    declared_purpose=declared_purpose,
+                    pdp_trace=[{"check_name": t.check_name, "status": t.status, "detail": t.detail} for t in decision.trace],
+                    client_ip=None,
+                    now=current_time,
+                )
+                sn_incident_info = {
+                    "id": sn_incident.id,
+                    "servicenow_number": sn_incident.servicenow_number,
+                    "servicenow_sys_id": sn_incident.servicenow_sys_id,
+                    "webhook_status": sn_incident.webhook_status,
+                    "priority": sn_incident.priority,
+                    "severity": sn_incident.severity,
+                }
+            except Exception:
+                sn_incident_info = None
+
         return {
             "decision": {
                 "allow": decision.allow,
@@ -199,4 +233,5 @@ class SimulationGateway:
                 ],
             },
             "output": output,
+            "servicenow_incident": sn_incident_info,
         }

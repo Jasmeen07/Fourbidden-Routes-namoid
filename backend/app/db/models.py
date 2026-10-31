@@ -266,6 +266,10 @@ class SecurityIncident(Base):
     resolved_at = Column(DateTime, nullable=True)
     resolution_notes = Column(Text, nullable=True)
     investigation_notes = Column(JSON, default=list, nullable=False)
+    servicenow_sys_id = Column(String(64), nullable=True)
+    servicenow_number = Column(String(64), nullable=True, index=True)
+    webhook_status = Column(String(32), default="PENDING", nullable=False)  # 'PENDING', 'DISPATCHED', 'ACKNOWLEDGED', 'FAILED', 'MOCKED'
+    webhook_payload = Column(JSON, nullable=True)
 
 
 class IpReputation(Base):

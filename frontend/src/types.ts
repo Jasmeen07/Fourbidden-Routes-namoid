@@ -277,6 +277,10 @@ export interface SecurityIncident {
     author: string;
     text: string;
   }[];
+  servicenow_sys_id?: string;
+  servicenow_number?: string;
+  webhook_status?: 'PENDING' | 'DISPATCHED' | 'ACKNOWLEDGED' | 'FAILED' | 'MOCKED';
+  webhook_payload?: Record<string, any>;
   associated_events?: {
     id: string;
     timestamp: string;
@@ -287,6 +291,29 @@ export interface SecurityIncident {
     action: string;
     path: string;
   }[];
+}
+
+export interface ServiceNowIncidentSummary {
+  id: string;
+  title: string;
+  servicenow_number?: string;
+  servicenow_sys_id?: string;
+  status: string;
+  severity: string;
+  priority: string;
+  webhook_status: string;
+  created_at: string;
+}
+
+export interface ServiceNowStatusResponse {
+  enabled: boolean;
+  mock_mode: boolean;
+  instance_url: string;
+  webhook_configured: boolean;
+  table: string;
+  total_incidents_opened: number;
+  total_dispatched: number;
+  recent_incidents: ServiceNowIncidentSummary[];
 }
 
 export interface IpReputation {

@@ -134,6 +134,7 @@ def invoke_simulator(
         "violation": is_violation,
         "decision_trace": trace_obj,
         "output": result.get("output"),
+        "servicenow_incident": result.get("servicenow_incident"),
     }
 
 

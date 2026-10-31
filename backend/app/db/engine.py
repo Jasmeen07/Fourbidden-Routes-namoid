@@ -122,6 +122,10 @@ def init_database(custom_engine=None) -> None:
                 "ALTER TABLE resources ADD COLUMN department VARCHAR(64) DEFAULT 'General' NOT NULL;",
                 "ALTER TABLE resources ADD COLUMN sensitivity VARCHAR(64) DEFAULT 'INTERNAL' NOT NULL;",
                 "ALTER TABLE resources ADD COLUMN is_crucial BOOLEAN DEFAULT 0 NOT NULL;",
+                "ALTER TABLE security_incidents ADD COLUMN servicenow_sys_id VARCHAR(64);",
+                "ALTER TABLE security_incidents ADD COLUMN servicenow_number VARCHAR(64);",
+                "ALTER TABLE security_incidents ADD COLUMN webhook_status VARCHAR(32) DEFAULT 'PENDING' NOT NULL;",
+                "ALTER TABLE security_incidents ADD COLUMN webhook_payload JSON;",
             ]:
                 try:
                     conn.exec_driver_sql(col_sql)

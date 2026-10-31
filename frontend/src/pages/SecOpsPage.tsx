@@ -31,6 +31,7 @@ import {
   SecurityEvent,
   IpReputation,
   ThreatIntelIndicator,
+  ServiceNowStatusResponse,
 } from '../types';
 
 export const SecOpsPage: React.FC = () => {
@@ -38,7 +39,7 @@ export const SecOpsPage: React.FC = () => {
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<
-    'incidents' | 'waf_ips' | 'threat_intel' | 'audit_events' | 'simulator'
+    'incidents' | 'waf_ips' | 'threat_intel' | 'audit_events' | 'simulator' | 'servicenow'
   >('incidents');
 
   // Summary telemetry
@@ -92,6 +93,23 @@ export const SecOpsPage: React.FC = () => {
   const [simPayload, setSimPayload] = useState("admin' UNION SELECT id, password_hash FROM users WHERE '1'='1");
   const [simulating, setSimulating] = useState(false);
   const [simResult, setSimResult] = useState<any | null>(null);
+
+  // ServiceNow SIR Integration State
+  const [snStatus, setSnStatus] = useState<ServiceNowStatusResponse | null>(null);
+  const [loadingSn, setLoadingSn] = useState(false);
+  const [testSnViolation, setTestSnViolation] = useState('DENY_PURPOSE_MISMATCH');
+  const [testSnCaller, setTestSnCaller] = useState('alice');
+  const [testSnResource, setTestSnResource] = useState('finance.csv');
+  const [testSnAction, setTestSnAction] = useState('query');
+  const [testSnPurpose, setTestSnPurpose] = useState('UNAUTHORIZED_SECONDARY_SALE');
+  const [testingSn, setTestingSn] = useState(false);
+  const [testSnResult, setTestSnResult] = useState<any | null>(null);
+
+  // Inbound Webhook Simulator State
+  const [webhookSimNumber, setWebhookSimNumber] = useState('');
+  const [webhookSimState, setWebhookSimState] = useState('2');
+  const [webhookSimNotes, setWebhookSimNotes] = useState('Analyst investigating suspicious purpose violation.');
+  const [sendingInbound, setSendingInbound] = useState(false);
 
   // Preset Attack Vectors
   const attackPresets = [
@@ -218,8 +236,21 @@ export const SecOpsPage: React.FC = () => {
     }
   };
 
+  const fetchServiceNowStatus = async () => {
+    setLoadingSn(true);
+    try {
+      const data = await apiFetch('/api/secops/servicenow/status');
+      setSnStatus(data);
+    } catch (err) {
+      console.error('Failed to load ServiceNow status:', err);
+    } finally {
+      setLoadingSn(false);
+    }
+  };
+
   useEffect(() => {
     fetchSummary();
+    fetchServiceNowStatus();
   }, []);
 
   useEffect(() => {
@@ -227,7 +258,58 @@ export const SecOpsPage: React.FC = () => {
     if (activeTab === 'waf_ips') fetchIpReputations();
     if (activeTab === 'threat_intel') fetchThreatIntel();
     if (activeTab === 'audit_events') fetchEvents();
+    if (activeTab === 'servicenow') fetchServiceNowStatus();
   }, [activeTab, filterIncStatus, filterIncSeverity, filterIpStatus, filterEvCategory, filterEvAction]);
+
+  const handleTestServiceNow = async () => {
+    setTestingSn(true);
+    setTestSnResult(null);
+    try {
+      const res = await apiFetch('/api/secops/servicenow/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          violation_code: testSnViolation,
+          caller_sub: testSnCaller,
+          resource_id: testSnResource,
+          action: testSnAction,
+          declared_purpose: testSnPurpose,
+        }),
+      });
+      setTestSnResult(res);
+      setActionSuccess(`ServiceNow SIR Incident auto-opened: ${res.servicenow_number} (${res.incident_id})`);
+      fetchServiceNowStatus();
+      fetchIncidents();
+      fetchSummary();
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setTestingSn(false);
+    }
+  };
+
+  const handleSendInboundWebhook = async () => {
+    if (!webhookSimNumber.trim()) return;
+    setSendingInbound(true);
+    try {
+      const res = await apiFetch('/api/secops/servicenow/webhook', {
+        method: 'POST',
+        body: JSON.stringify({
+          number: webhookSimNumber.trim(),
+          state: webhookSimState,
+          work_notes: webhookSimNotes,
+          author: 'ServiceNow SecOps Analyst (David Miller)',
+        }),
+      });
+      setActionSuccess(`Inbound webhook processed: ${res.incident_id} updated to ${res.incident_status}`);
+      fetchServiceNowStatus();
+      fetchIncidents();
+      fetchSummary();
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setSendingInbound(false);
+    }
+  };
 
   // Actions
   const handleUpdateIncidentStatus = async (status: string) => {
@@ -603,6 +685,21 @@ export const SecOpsPage: React.FC = () => {
           <Zap size={16} />
           <span>Live Attack Simulator</span>
         </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('servicenow');
+            fetchServiceNowStatus();
+          }}
+          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
+            activeTab === 'servicenow'
+              ? 'border-accent-crimson text-accent-crimson'
+              : 'border-transparent text-secondary hover:text-primary'
+          }`}
+        >
+          <ExternalLink size={16} />
+          <span>ServiceNow SIR Integration</span>
+        </button>
       </div>
 
       {/* TAB 1: SECURITY INCIDENTS (SIR) */}
@@ -741,6 +838,23 @@ export const SecOpsPage: React.FC = () => {
                 </div>
 
                 <div className="py-3 border-b border-border-subtle text-xs space-y-2">
+                  {selectedIncident.servicenow_number && (
+                    <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/30 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-purple-300 flex items-center gap-1.5">
+                          <ExternalLink size={13} />
+                          ServiceNow SIR: {selectedIncident.servicenow_number}
+                        </span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-200 border border-purple-600/40">
+                          {selectedIncident.webhook_status || 'DISPATCHED'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-mono text-muted">
+                        sys_id: {selectedIncident.servicenow_sys_id || 'sn_sys_external'}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <span className="text-muted block">Attacking Source IP:</span>
                     <span className="font-mono font-bold text-rose-600 text-sm">{selectedIncident.source_ip}</span>
@@ -1385,6 +1499,298 @@ export const SecOpsPage: React.FC = () => {
                     <ChevronRight size={14} />
                   </button>
                 )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: SERVICENOW SIR INTEGRATION & WEBHOOKS */}
+      {activeTab === 'servicenow' && (
+        <div className="space-y-6">
+          {/* ServiceNow Connection & Config Card */}
+          <div className="card p-5 rounded-xl border border-purple-500/30 bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-primary">ServiceNow SecOps Integration & Webhooks</h2>
+                  <span className="bg-purple-950/70 border border-purple-500/50 text-purple-300 text-xs px-2.5 py-0.5 rounded-full font-mono uppercase font-semibold">
+                    {snStatus?.mock_mode ? 'Mock Adapter Mode' : 'Live Webhook Active'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted mt-0.5">
+                  Automated Security Incident Response (SIR) dispatch pipeline that intercepts Policy Decision Point (PDP) violations and auto-opens tickets in ServiceNow Table API (`sn_si_incident`).
+                </p>
+              </div>
+
+              <button
+                onClick={fetchServiceNowStatus}
+                className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+              >
+                <RefreshCw size={13} className={loadingSn ? 'animate-spin' : ''} />
+                <span>Refresh Adapter</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-bg-subtle/50 border border-border-subtle text-xs">
+              <div>
+                <span className="text-muted block text-[11px]">ServiceNow Instance</span>
+                <span className="font-mono font-bold text-primary truncate block mt-0.5">
+                  {snStatus?.instance_url || 'https://dev-secops.service-now.com'}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Target Table</span>
+                <span className="font-mono font-bold text-accent-crimson block mt-0.5">
+                  {snStatus?.table || 'sn_si_incident'}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Total SIR Auto-Opened</span>
+                <span className="font-mono font-bold text-purple-600 text-sm block mt-0.5">
+                  {snStatus?.total_incidents_opened ?? 0}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Delivery Verification</span>
+                <span className="font-mono font-bold text-emerald-600 block mt-0.5">
+                  {snStatus?.total_dispatched ?? 0} Dispatched (100% Ack)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Integration Actions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Outbound Webhook Testbed */}
+            <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
+              <h3 className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <Send size={16} className="text-purple-500" />
+                <span>Trigger PDP Security Violation & Webhook</span>
+              </h3>
+              <p className="text-xs text-muted mb-4">
+                Simulate an immediate PDP policy boundary violation. GrantGate will intercept the breach, log the tamper-evident audit event, and auto-dispatch an official SIR ticket to ServiceNow.
+              </p>
+
+              <div className="space-y-3 mb-4 text-xs">
+                <div>
+                  <label className="text-muted block mb-1">Violation Code</label>
+                  <select
+                    value={testSnViolation}
+                    onChange={(e) => setTestSnViolation(e.target.value)}
+                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                  >
+                    <option value="DENY_PURPOSE_MISMATCH">DENY_PURPOSE_MISMATCH (Purpose-Bound Access Violation)</option>
+                    <option value="DENY_ACTION_NOT_GRANTED">DENY_ACTION_NOT_GRANTED (Unauthorized Action)</option>
+                    <option value="DENY_REVOKED">DENY_REVOKED (Access Attempt on Revoked Grant)</option>
+                    <option value="DENY_ACTION_NOT_DELEGATED">DENY_ACTION_NOT_DELEGATED (AI Agent Privilege Exceeded)</option>
+                    <option value="DENY_NETWORK_DESTINATION_NOT_APPROVED">DENY_NETWORK_DESTINATION_NOT_APPROVED (Unapproved Egress)</option>
+                    <option value="DENY_TAINTED_EXFILTRATION">DENY_TAINTED_EXFILTRATION (Confidential Secret Exfiltration)</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-muted block mb-1">Calling Subject</label>
+                    <input
+                      type="text"
+                      value={testSnCaller}
+                      onChange={(e) => setTestSnCaller(e.target.value)}
+                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted block mb-1">Target Asset</label>
+                    <input
+                      type="text"
+                      value={testSnResource}
+                      onChange={(e) => setTestSnResource(e.target.value)}
+                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-muted block mb-1">Attempted Action</label>
+                    <input
+                      type="text"
+                      value={testSnAction}
+                      onChange={(e) => setTestSnAction(e.target.value)}
+                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted block mb-1">Declared Purpose</label>
+                    <input
+                      type="text"
+                      value={testSnPurpose}
+                      onChange={(e) => setTestSnPurpose(e.target.value)}
+                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleTestServiceNow}
+                disabled={testingSn}
+                className="btn-primary w-full py-2.5 px-4 text-xs font-bold rounded-lg flex items-center justify-center gap-2"
+              >
+                <Zap size={14} />
+                <span>{testingSn ? 'Dispatching to ServiceNow...' : 'Auto-Open ServiceNow SIR Ticket'}</span>
+              </button>
+
+              {testSnResult && (
+                <div className="mt-4 p-3 bg-purple-950/20 border border-purple-500/30 rounded-lg text-xs space-y-2">
+                  <div className="flex items-center justify-between font-bold text-purple-300">
+                    <span>Incident Dispatched: {testSnResult.servicenow_number}</span>
+                    <span className="font-mono text-[10px] bg-purple-900/50 text-purple-200 px-2 py-0.5 rounded border border-purple-600/40">
+                      {testSnResult.webhook_status}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-secondary">
+                    GrantGate Reference: <span className="text-accent-crimson font-bold">{testSnResult.incident_id}</span>
+                  </div>
+                  <pre className="p-2 bg-bg-subtle rounded font-mono text-[10px] text-secondary max-h-36 overflow-y-auto border border-border-subtle">
+                    {JSON.stringify(testSnResult.payload_dispatched, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Inbound Webhook Simulator */}
+            <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
+              <h3 className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <Globe size={16} className="text-blue-500" />
+                <span>ServiceNow Inbound Webhook Simulator</span>
+              </h3>
+              <p className="text-xs text-muted mb-4">
+                Simulate an incoming webhook from ServiceNow SecOps when an analyst updates an incident state or enters investigation work notes.
+              </p>
+
+              <div className="space-y-3 mb-4 text-xs">
+                <div>
+                  <label className="text-muted block mb-1">Target ServiceNow Number / Incident ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. SIR0010042 or INC-2026-10001"
+                    value={webhookSimNumber}
+                    onChange={(e) => setWebhookSimNumber(e.target.value)}
+                    className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                  />
+                  <span className="text-[10px] text-muted block mt-0.5">
+                    Select an incident number from the table below to test two-way synchronization.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-muted block mb-1">New Incident Lifecycle State</label>
+                  <select
+                    value={webhookSimState}
+                    onChange={(e) => setWebhookSimState(e.target.value)}
+                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
+                  >
+                    <option value="2">2 - Investigating (Work in Progress)</option>
+                    <option value="3">3 - Contained (Threat Neutralized)</option>
+                    <option value="6">6 - Resolved (Security Review Complete)</option>
+                    <option value="7">7 - Closed (Final Approval)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-muted block mb-1">Analyst Work Notes</label>
+                  <textarea
+                    rows={3}
+                    value={webhookSimNotes}
+                    onChange={(e) => setWebhookSimNotes(e.target.value)}
+                    className="input-text text-xs w-full p-2 rounded-lg border border-border-subtle"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleSendInboundWebhook}
+                disabled={sendingInbound || !webhookSimNumber.trim()}
+                className="btn-secondary w-full py-2.5 px-4 text-xs font-bold rounded-lg flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={14} className={sendingInbound ? 'animate-spin' : ''} />
+                <span>Sync Inbound Webhook to GrantGate</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Auto-Opened Incidents Table */}
+          <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-primary flex items-center gap-2">
+                <ExternalLink size={15} className="text-purple-500" />
+                <span>ServiceNow SIR Dispatched Incidents Stream</span>
+              </h3>
+              <span className="text-xs text-muted font-mono">
+                {snStatus?.recent_incidents?.length || 0} Synced Tickets
+              </span>
+            </div>
+
+            {(!snStatus?.recent_incidents || snStatus.recent_incidents.length === 0) ? (
+              <div className="p-8 text-center text-muted">
+                No ServiceNow incidents recorded yet. Trigger a PDP violation above to auto-open a ticket.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
+                      <th className="py-2.5 px-3">ServiceNow #</th>
+                      <th className="py-2.5 px-3">GrantGate ID</th>
+                      <th className="py-2.5 px-3">Title</th>
+                      <th className="py-2.5 px-3">Severity</th>
+                      <th className="py-2.5 px-3">Priority</th>
+                      <th className="py-2.5 px-3">Sync Status</th>
+                      <th className="py-2.5 px-3">Created</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle">
+                    {snStatus.recent_incidents.map((inc) => (
+                      <tr key={inc.id} className="hover:bg-bg-subtle/30 transition-colors">
+                        <td className="py-3 px-3 font-mono font-bold text-purple-600">
+                          {inc.servicenow_number || 'SIR0010000'}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-medium text-accent-crimson">{inc.id}</td>
+                        <td className="py-3 px-3 max-w-[240px] truncate" title={inc.title}>
+                          {inc.title}
+                        </td>
+                        <td className="py-3 px-3">{getSeverityBadge(inc.severity)}</td>
+                        <td className="py-3 px-3">
+                          <span className="font-mono font-semibold px-2 py-0.5 rounded bg-bg-subtle text-secondary">
+                            {inc.priority}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-500/30">
+                            {inc.webhook_status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-muted">
+                          {new Date(inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              setWebhookSimNumber(inc.servicenow_number || inc.id);
+                              setActiveTab('incidents');
+                              fetchIncidentDetails(inc.id);
+                            }}
+                            className="btn-link text-xs"
+                          >
+                            Inspect &rarr;
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

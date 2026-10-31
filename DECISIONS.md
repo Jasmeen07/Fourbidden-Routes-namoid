@@ -75,3 +75,13 @@ Database Layer (SQLAlchemy + 7 SQLite Triggers) ◄────────┘
 - **Color Palette Rationale:** Shifted away from dark "cyberpunk/blue-black" themes toward a warm light beige, sand, and porcelain palette (`#fbf9f4`, `#f4efe6`, `#ffffff`) with terracotta brand accents (`#c2410c`). This elevates GrantGate into an enterprise-grade governance platform that executives, compliance officers, and auditors can comfortably use during audits without visual fatigue.
 - **Semantic Badging:** Standardized green for active/approved, amber for narrowed/dormant/caution, rose for rejected/revoked/critical violations, and deep slate for neutral metadata.
 - **High-Contrast Text Hierarchy:** Enforced minimum 4.5:1 WCAG contrast ratios across all cards, badges, and code snippets.
+
+---
+
+## ServiceNow Security Incident Response (SIR) Integration & Webhook Adapter
+
+### Architecture & Decisions:
+1. **Automated SIR Opening on PDP Violations:** Whenever the Policy Decision Point (PDP) denies an invocation due to security policy breaches (`DENY_PURPOSE_MISMATCH`, `DENY_ACTION_NOT_GRANTED`, `DENY_REVOKED`, `DENY_ACTION_NOT_DELEGATED`, `DENY_NETWORK_DESTINATION_NOT_APPROVED`, `DENY_TAINTED_EXFILTRATION`), `ServiceNowService.auto_open_sir_incident` intercepts the denial.
+2. **Deterministic Payload Generation (`sn_si_incident`):** A pure domain function formats the incident into standard ServiceNow Table API schema (`number`, `short_description`, `description`, `severity`, `priority`, `category`, `subcategory`, `state="1"`, `cmdb_ci`, `caller_id`, `work_notes`, `correlation_id`).
+3. **Outbound & Inbound Webhooks:** Outbound dispatches are mockable and resilient (Rule 7). An inbound webhook endpoint (`POST /api/secops/servicenow/webhook`) allows external ServiceNow instances to synchronize state updates (`INVESTIGATING`, `CONTAINED`, `RESOLVED`, `CLOSED`) and analyst notes back into GrantGate.
+4. **Strict Audit Trail:** Every ServiceNow dispatch and inbound webhook processing writes a cryptographic audit event (`SERVICENOW_SIR_OPENED`, `SERVICENOW_WEBHOOK_PROCESSED`) in the same database transaction (Rule 5).

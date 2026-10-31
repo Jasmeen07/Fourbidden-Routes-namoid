@@ -10,6 +10,7 @@ from app.db.engine import get_db
 from app.db.models import SecurityEvent, SecurityIncident, IpReputation, ThreatIntelIndicator
 from app.auth.deps import get_current_user, UserContext
 from app.services.secops import SecOpsService
+from app.services.servicenow import ServiceNowService
 from app.ids import generate_id
 
 router = APIRouter(prefix="/api/secops", tags=["secops"])
@@ -65,6 +66,30 @@ class CreateThreatIntelPayload(BaseModel):
     campaign: str | None = None
     confidence: int = Field(default=85, ge=1, le=100)
     description: str
+
+
+class ServiceNowWebhookPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    event: str | None = None
+    sys_id: str | None = None
+    number: str | None = None
+    correlation_id: str | None = None
+    state: str | None = None
+    status: str | None = None
+    assigned_to: str | None = None
+    work_notes: str | None = None
+    notes: str | None = None
+    resolution_notes: str | None = None
+    author: str | None = None
+
+
+class TestServiceNowPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    violation_code: str = "DENY_PURPOSE_MISMATCH"
+    caller_sub: str = "alice"
+    resource_id: str = "finance.csv"
+    action: str = "query"
+    declared_purpose: str = "UNAUTHORIZED_RESEARCH"
 
 
 @router.get("/summary")
@@ -211,6 +236,9 @@ def list_incidents(
                 "resolved_at": inc.resolved_at.isoformat() if inc.resolved_at else None,
                 "resolution_notes": inc.resolution_notes,
                 "notes_count": len(inc.investigation_notes or []),
+                "servicenow_number": inc.servicenow_number,
+                "servicenow_sys_id": inc.servicenow_sys_id,
+                "webhook_status": inc.webhook_status,
             }
             for inc in incidents
         ],
@@ -247,6 +275,10 @@ def get_incident(
         "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
         "resolution_notes": incident.resolution_notes,
         "investigation_notes": incident.investigation_notes or [],
+        "servicenow_number": incident.servicenow_number,
+        "servicenow_sys_id": incident.servicenow_sys_id,
+        "webhook_status": incident.webhook_status,
+        "webhook_payload": incident.webhook_payload,
         "associated_events": [
             {
                 "id": ev.id,
@@ -512,3 +544,81 @@ def simulate_waf_attack(
     )
     db.commit()
     return result
+
+
+@router.get("/servicenow/status")
+def get_servicenow_status(
+    db: Session = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """Returns ServiceNow integration adapter status, configuration, and recent SIR dispatches."""
+    return ServiceNowService.get_status(db=db)
+
+
+@router.post("/servicenow/webhook")
+def receive_servicenow_webhook(
+    payload: ServiceNowWebhookPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Inbound webhook receiver for updates from external ServiceNow SecOps instance."""
+    clock = getattr(request.app.state, "clock", None)
+    now = clock.now() if clock else datetime.now(timezone.utc)
+
+    try:
+        incident = ServiceNowService.handle_incoming_webhook(
+            db=db,
+            payload=payload.model_dump(exclude_unset=True),
+            now=now,
+        )
+        db.commit()
+        return {
+            "status": "acknowledged",
+            "incident_id": incident.id,
+            "servicenow_number": incident.servicenow_number,
+            "incident_status": incident.status,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/servicenow/test")
+def test_servicenow_dispatch(
+    payload: TestServiceNowPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """Test utility to trigger an automated ServiceNow SIR incident dispatch from synthetic PDP violation."""
+    clock = getattr(request.app.state, "clock", None)
+    now = clock.now() if clock else datetime.now(timezone.utc)
+
+    client_ip = request.client.host if request.client else "127.0.0.1"
+
+    synthetic_trace = [
+        {"check_name": "session_identity", "status": "pass", "detail": f"Authenticated subject {payload.caller_sub}"},
+        {"check_name": "grant_exists", "status": "pass", "detail": "Grant found"},
+        {"check_name": "purpose_matches", "status": "fail", "detail": f"Declared purpose '{payload.declared_purpose}' violates grant purpose"},
+    ]
+
+    incident = ServiceNowService.auto_open_sir_incident(
+        db=db,
+        violation_code=payload.violation_code,
+        caller_sub=payload.caller_sub,
+        resource_id=payload.resource_id,
+        action=payload.action,
+        declared_purpose=payload.declared_purpose,
+        pdp_trace=synthetic_trace,
+        client_ip=client_ip,
+        now=now,
+    )
+    db.commit()
+
+    return {
+        "message": "ServiceNow SIR incident auto-opened and dispatched",
+        "incident_id": incident.id,
+        "servicenow_number": incident.servicenow_number,
+        "servicenow_sys_id": incident.servicenow_sys_id,
+        "webhook_status": incident.webhook_status,
+        "payload_dispatched": incident.webhook_payload,
+    }
