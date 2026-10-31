@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { AccessRequest, ReviewSlot, ResourceLimits, ApprovalAssistanceData } from '../types';
-import { LimitsDiff } from './LimitsDiff';
+import { AccessRequest, ReviewSlot, ApprovalAssistanceData } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { 
   CheckCircle2, 
   Sliders, 
   XCircle, 
-  AlertCircle, 
   X, 
   Sparkles, 
   HelpCircle, 
   History, 
   ShieldCheck, 
-  ArrowRight,
-  UserCheck,
-  Check
+  AlertTriangle 
 } from 'lucide-react';
 
 interface DecisionDrawerProps {
   request: AccessRequest;
   slot: ReviewSlot;
   onClose: () => void;
-  onSubmitDecision: (decision: 'approve' | 'narrow' | 'reject', rationale: string, narrowedLimits?: ResourceLimits) => Promise<void>;
+  onSubmitDecision: (
+    decision: 'approve' | 'narrow' | 'reject',
+    rationale: string,
+    approvedLimits?: { actions?: string[]; duration_minutes?: number }
+  ) => Promise<void>;
 }
 
 export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
@@ -36,20 +36,16 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Innovation 3: Approval Assistance state
+  // Approval Assistance state
   const [assistanceData, setAssistanceData] = useState<ApprovalAssistanceData | null>(null);
   const [isLoadingAssistance, setIsLoadingAssistance] = useState<boolean>(false);
 
-  // Narrowing state initialized from request.requested_limits
-  const [narrowedRecords, setNarrowedRecords] = useState<number>(request.requested_limits.max_records || 1000);
-  const [narrowedRps, setNarrowedRps] = useState<number>(request.requested_limits.max_rps || 10);
-  const [narrowedCost, setNarrowedCost] = useState<number>(request.requested_limits.max_cost_usd || 50);
-  const [selectedFormats, setSelectedFormats] = useState<string[]>(request.requested_limits.allowed_formats || ['json']);
-  const [ipFilter, setIpFilter] = useState<string>((request.requested_limits.ip_allowlist || []).join(', '));
+  // Narrowing state
+  const requestedActions = request.actions && request.actions.length > 0 ? request.actions : ['query'];
+  const requestedDuration = request.duration_minutes || (request.duration_hours ? request.duration_hours * 60 : 1440);
 
-  const maxAllowedRecords = request.requested_limits.max_records || 100000;
-  const maxAllowedRps = request.requested_limits.max_rps || 100;
-  const maxAllowedCost = request.requested_limits.max_cost_usd || 1000;
+  const [narrowedActions, setNarrowedActions] = useState<string[]>(requestedActions);
+  const [narrowedDurationMinutes, setNarrowedDurationMinutes] = useState<number>(requestedDuration);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,8 +56,8 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
         if (isMounted) {
           setAssistanceData(data);
         }
-      } catch (err) {
-        // Fallback gracefully if assistance API has any issue
+      } catch {
+        // Fallback gracefully
       } finally {
         if (isMounted) setIsLoadingAssistance(false);
       }
@@ -71,23 +67,14 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
     return () => { isMounted = false; };
   }, [request.id, apiFetch]);
 
-  const currentNarrowedLimits: ResourceLimits = {
-    ...request.requested_limits,
-    max_records: narrowedRecords,
-    max_rps: narrowedRps,
-    max_cost_usd: narrowedCost,
-    allowed_formats: selectedFormats,
-    ip_allowlist: ipFilter.trim() ? ipFilter.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
-  };
-
-  const handleFormatToggle = (fmt: string) => {
-    if (selectedFormats.includes(fmt)) {
-      if (selectedFormats.length > 1) {
-        setSelectedFormats(selectedFormats.filter((f) => f !== fmt));
+  const handleActionToggle = (act: string) => {
+    if (narrowedActions.includes(act)) {
+      if (narrowedActions.length > 1) {
+        setNarrowedActions(narrowedActions.filter((a) => a !== act));
       }
     } else {
-      if (request.requested_limits.allowed_formats?.includes(fmt)) {
-        setSelectedFormats([...selectedFormats, fmt]);
+      if (requestedActions.includes(act)) {
+        setNarrowedActions([...narrowedActions, act]);
       }
     }
   };
@@ -99,23 +86,44 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
       return;
     }
 
+    if (activeTab === 'narrow') {
+      if (narrowedActions.length === 0) {
+        setErrorMsg('Narrowed scope must contain at least one operation. If all operations are denied, reject the request.');
+        return;
+      }
+      const isSubset = narrowedActions.every((a) => requestedActions.includes(a));
+      if (!isSubset) {
+        setErrorMsg('Narrowed actions must be a subset of requested actions.');
+        return;
+      }
+      const isActionReduced = narrowedActions.length < requestedActions.length;
+      const isDurationReduced = narrowedDurationMinutes < requestedDuration;
+      if (!isActionReduced && !isDurationReduced) {
+        setErrorMsg('Narrowing must restrict either actions or duration. To approve as submitted, use "Approve As-Is".');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       if (activeTab === 'narrow') {
-        await onSubmitDecision('narrow', rationale, currentNarrowedLimits);
+        await onSubmitDecision('narrow', rationale, {
+          actions: narrowedActions,
+          duration_minutes: narrowedDurationMinutes,
+        });
       } else {
         await onSubmitDecision(activeTab, rationale);
       }
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to submit decision.');
+      setErrorMsg(err.message || err.detail?.message || 'Failed to submit decision.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Determine role-tailored guidance from assistance payload (Innovation 3)
-  const slotRoleNormalized = slot.required_role?.toLowerCase().replace(/[^a-z]/g, '') || 'manager';
+  // Determine role-tailored guidance from assistance payload
+  const slotRoleNormalized = (slot.slot_role || slot.required_role || 'manager').toLowerCase().replace(/[^a-z]/g, '');
   let roleKey = 'manager';
   if (slotRoleNormalized.includes('risk') || slotRoleNormalized.includes('security')) {
     roleKey = 'risk_reviewer';
@@ -135,13 +143,13 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
         <div className="modal-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <span className="role-chip role-chip-gov font-mono">Slot {slot.slot_index + 1}</span>
+              <span className="role-chip role-chip-gov font-mono">Review Slot: {slot.slot_role || slot.required_role}</span>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                Review Decision
+                Record Multi-Party Decision
               </h3>
             </div>
             <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: 0 }}>
-              Required Role: <strong style={{ color: 'var(--accent-primary)' }}>{slot.required_role}</strong> | Request ID: <span className="font-mono">{request.id.slice(0, 8)}...</span>
+              Assigned Role: <strong style={{ color: 'var(--accent-primary)' }}>{slot.slot_role || slot.required_role}</strong> | Request ID: <span className="font-mono">{request.id.slice(0, 8)}...</span>
             </p>
           </div>
           <button 
@@ -160,12 +168,12 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
           </button>
         </div>
 
-        {/* Innovation 3: Intelligent Approval Assistance Panel */}
+        {/* Intelligent Approval Assistance Panel */}
         {roleGuidance && (
           <div className="assistance-card" style={{ background: '#fffbeb', border: '1px solid #fed7aa', marginBottom: '1.25rem' }}>
             <div className="assistance-header" style={{ color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>
               <Sparkles size={18} />
-              <span>Intelligent Approval Assistance: {roleGuidance.title}</span>
+              <span>FORGE Hierarchy Assistance: {roleGuidance.title}</span>
             </div>
 
             {/* Focus Areas */}
@@ -195,7 +203,7 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
               </div>
             </div>
 
-            {/* Decision Lineage */}
+            {/* Prior Decisions Lineage */}
             {assistanceData?.lineage && assistanceData.lineage.length > 0 && (
               <div style={{ borderTop: '1px dashed #fed7aa', paddingTop: '0.6rem', marginTop: '0.6rem' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -262,7 +270,7 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
         {activeTab === 'approve' && (
           <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '1rem', borderRadius: '8px', marginBottom: '1.25rem' }}>
             <p style={{ fontSize: '0.875rem', color: '#065f46', margin: 0 }}>
-              You are approving all requested controls, duration ({request.duration_hours}h), and limits as submitted.
+              You are approving all requested operations (<code>{requestedActions.join(', ')}</code>) and duration ({requestedDuration} minutes) as submitted.
             </p>
           </div>
         )}
@@ -272,66 +280,54 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '0.85rem', borderRadius: '8px', marginBottom: '1rem' }}>
               <p style={{ fontSize: '0.825rem', color: '#92400e', margin: 0 }}>
-                <strong>Strict Subset Invariant:</strong> You can only reduce bounds or restrict actions/formats. Expansion beyond the requested limits is cryptographically rejected.
+                <strong>Strict Subset Invariant (SG-6):</strong> You can only reduce bounds or deselect operations. Expansion beyond requested limits is mathematically impossible.
               </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-              {/* Max Records Slider */}
-              <div className="form-group">
-                <label className="form-label" style={{ color: 'var(--text-primary)' }}>
-                  Max Records: <strong style={{ color: 'var(--accent-amber)' }}>{narrowedRecords.toLocaleString()}</strong> (Max: {maxAllowedRecords})
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max={maxAllowedRecords}
-                  value={narrowedRecords}
-                  onChange={(e) => setNarrowedRecords(Math.min(maxAllowedRecords, Number(e.target.value)))}
-                  style={{ width: '100%', accentColor: 'var(--accent-amber)' }}
-                  id="narrow-records-slider"
-                />
-              </div>
-
-              {/* Max RPS Slider */}
-              <div className="form-group">
-                <label className="form-label" style={{ color: 'var(--text-primary)' }}>
-                  Max RPS: <strong style={{ color: 'var(--accent-amber)' }}>{narrowedRps} req/s</strong> (Max: {maxAllowedRps})
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max={maxAllowedRps}
-                  value={narrowedRps}
-                  onChange={(e) => setNarrowedRps(Math.min(maxAllowedRps, Number(e.target.value)))}
-                  style={{ width: '100%', accentColor: 'var(--accent-amber)' }}
-                  id="narrow-rps-slider"
-                />
+            {/* Allowed Actions Narrowing */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ color: 'var(--text-primary)' }}>
+                Permitted Operations (Uncheck to restrict/deny specific actions):
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                {requestedActions.map((act) => (
+                  <label key={act} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={narrowedActions.includes(act)}
+                      onChange={() => handleActionToggle(act)}
+                      style={{ accentColor: 'var(--accent-amber)' }}
+                    />
+                    <span className="font-mono">{act}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
-            {/* Allowed Formats checkboxes */}
-            {request.requested_limits.allowed_formats && (
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ color: 'var(--text-primary)' }}>Permitted Formats (Can only restrict):</label>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  {request.requested_limits.allowed_formats.map((fmt) => (
-                    <label key={fmt} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedFormats.includes(fmt)}
-                        onChange={() => handleFormatToggle(fmt)}
-                      />
-                      <span>{fmt}</span>
-                    </label>
-                  ))}
-                </div>
+            {/* Duration Slider Narrowing */}
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label" style={{ color: 'var(--text-primary)' }}>
+                  Narrowed Duration (Minutes):
+                </label>
+                <span className="font-mono" style={{ color: 'var(--accent-amber)', fontWeight: 800 }}>
+                  {narrowedDurationMinutes} mins ({Math.round(narrowedDurationMinutes / 60)}h)
+                </span>
               </div>
-            )}
-
-            {/* Live Limits Diff */}
-            <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Live Scope Diff:</p>
-            <LimitsDiff requested={request.requested_limits} narrowed={currentNarrowedLimits} />
+              <input
+                type="range"
+                min="2"
+                max={requestedDuration}
+                value={narrowedDurationMinutes}
+                onChange={(e) => setNarrowedDurationMinutes(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--accent-amber)' }}
+                id="narrow-duration-slider"
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                <span>Min: 2m</span>
+                <span>Original Requested: {requestedDuration}m</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -354,10 +350,10 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
             rows={3}
             placeholder={
               activeTab === 'approve'
-                ? 'Optional notes regarding compliance check...'
+                ? 'Optional notes regarding verified business necessity and safety...'
                 : activeTab === 'narrow'
-                ? 'Explain why bounds were tightened (e.g. data minimization policy)...'
-                : 'State explicit reason for denial...'
+                ? 'Explain why permissions or duration were tightened (e.g. data minimization principle)...'
+                : 'State explicit justification for denial...'
             }
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
@@ -366,8 +362,9 @@ export const DecisionDrawer: React.FC<DecisionDrawerProps> = ({
         </div>
 
         {errorMsg && (
-          <div style={{ padding: '0.75rem', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#9f1239', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            {errorMsg}
+          <div style={{ padding: '0.75rem', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#9f1239', fontSize: '0.85rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertTriangle size={16} />
+            <span>{errorMsg}</span>
           </div>
         )}
 

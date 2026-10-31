@@ -50,6 +50,8 @@ def list_grants(
         info = GrantsService.get_grant_with_effective_status(g, now)
         if status == "active" and info["status"] != "ACTIVE":
             continue
+        res = db.get(Resource, g.resource_id)
+        info["resource_name"] = res.name if res else g.resource_id
         results.append(info)
 
     return results
@@ -78,6 +80,7 @@ def get_grant_detail(
         raise HTTPException(status_code=404, detail="Grant not found")
 
     info = GrantsService.get_grant_with_effective_status(grant, now)
+    info["resource_name"] = resource.name if resource else grant.resource_id
 
     # Lineage from associated request slots
     req = grant.request

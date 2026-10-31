@@ -43,8 +43,9 @@ export const GrantsPage: React.FC = () => {
   const fetchGrants = async () => {
     setIsLoading(true);
     try {
-      const data = await apiFetch('/api/grants');
-      setGrants(data.grants || []);
+      const data = await apiFetch('/api/grants?status=all&scope=visible');
+      const list = Array.isArray(data) ? data : (data.grants || []);
+      setGrants(list);
     } catch (err) {
       console.error(err);
     } finally {
@@ -65,8 +66,9 @@ export const GrantsPage: React.FC = () => {
       await apiFetch(`/api/grants/${revokingGrant.id}/revoke`, {
         method: 'POST',
         body: JSON.stringify({
-          reason: revokeReason,
-          is_emergency: isEmergency,
+          reason_code: 'POLICY_VIOLATION',
+          emergency: isEmergency,
+          note: revokeReason.trim(),
         }),
       });
       setRevokingGrant(null);
@@ -86,10 +88,12 @@ export const GrantsPage: React.FC = () => {
 
     setIsSubmittingRelease(true);
     try {
-      await apiFetch(`/api/grants/${releasingGrant.id}/release-early`, {
+      await apiFetch(`/api/grants/${releasingGrant.id}/revoke`, {
         method: 'POST',
         body: JSON.stringify({
-          notes: releaseNotes,
+          reason_code: 'PURPOSE_COMPLETE',
+          emergency: false,
+          note: releaseNotes.trim() || 'Early self-release: task completed ahead of schedule.',
         }),
       });
       setReleaseSuccessMsg(`Grant ${releasingGrant.id.slice(0, 8)}... was successfully released early. Organizational risk exposure reduced.`);
@@ -191,7 +195,7 @@ export const GrantsPage: React.FC = () => {
                     </td>
                     <td>
                       <span className="font-mono" style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                        {g.subject_name || g.subject_id}
+                        {g.requester_sub || g.subject_name || g.subject_id}
                       </span>
                     </td>
                     <td>
@@ -225,8 +229,8 @@ export const GrantsPage: React.FC = () => {
                     </td>
                     <td>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        <div>Records: <strong style={{ color: 'var(--text-primary)' }}>{g.granted_limits.max_records?.toLocaleString() || 'All'}</strong></div>
-                        <div>RPS: <strong style={{ color: 'var(--text-primary)' }}>{g.granted_limits.max_rps || 'Default'}</strong></div>
+                        <div>Operations: <strong style={{ color: 'var(--text-primary)' }}>{g.actions ? g.actions.join(', ') : 'All'}</strong></div>
+                        <div>Purpose: <strong style={{ color: 'var(--text-primary)' }}>{g.purpose_code || 'General'}</strong></div>
                       </div>
                     </td>
                     <td>

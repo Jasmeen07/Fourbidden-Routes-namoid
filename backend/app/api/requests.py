@@ -110,12 +110,28 @@ def list_requests(
             "requester_sub": r.requester_sub,
             "resource_id": r.resource_id,
             "purpose_code": r.purpose_code,
+            "purpose_text": r.purpose_text,
             "status": r.status,
             "actions": r.actions,
             "duration_minutes": r.duration_minutes,
+            "risk_controls": r.risk_controls,
             "created_at": r.created_at.isoformat(),
             "slots_count": len(r.slots),
             "pending_slots": [s.slot_role for s in r.slots if s.status == "PENDING"],
+            "slots": [
+                {
+                    "id": s.id,
+                    "slot_role": s.slot_role,
+                    "assigned_sub": s.assigned_sub,
+                    "status": s.status,
+                    "decision": s.decision,
+                    "rationale": s.rationale,
+                    "approved_limits": s.approved_limits,
+                    "decided_by_sub": s.decided_by_sub,
+                    "decided_at": s.decided_at.isoformat() if s.decided_at else None,
+                }
+                for s in r.slots
+            ],
             "resource_name": res.name if res else r.resource_id,
             "is_crucial": bool(getattr(res, "is_crucial", False)) if res else False,
         })

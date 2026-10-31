@@ -43,28 +43,32 @@ export const ReviewQueuePage: React.FC = () => {
           if (slot.status === 'PENDING') {
             const normalizedReq: AccessRequest = {
               id: reqDetail.id,
+              requester_sub: reqDetail.requester_sub,
               requester_id: reqDetail.requester_sub,
               requester_name: reqDetail.requester_sub,
               resource_id: reqDetail.resource_id,
-              resource_name: reqDetail.resource_id,
+              resource_name: reqDetail.resource_name || reqDetail.resource_id,
+              duration_minutes: reqDetail.duration_minutes,
               duration_hours: Math.round(reqDetail.duration_minutes / 60) || 1,
-              purpose: reqDetail.purpose_text || reqDetail.purpose_code,
+              purpose_code: reqDetail.purpose_code,
+              purpose_text: reqDetail.purpose_text,
+              purpose: reqDetail.purpose_code,
               justification: reqDetail.purpose_text,
-              requested_limits: {
-                max_records: 5000,
-                max_rps: 50,
-                max_cost_usd: 100,
-                allowed_formats: ['json', 'csv'],
-              },
-              required_controls: reqDetail.risk_controls || [],
+              actions: reqDetail.actions || [],
+              risk_controls: reqDetail.risk_controls || [],
               status: reqDetail.status,
               created_at: reqDetail.created_at,
               slots: slots.map((s, idx) => ({
                 id: s.id,
                 slot_index: idx,
+                slot_role: s.slot_role,
                 required_role: s.slot_role,
+                assigned_sub: s.assigned_sub,
                 status: s.status,
+                decision: s.decision,
+                rationale: s.rationale,
                 decision_rationale: s.rationale,
+                decided_by_sub: s.decided_by_sub,
                 decided_at: s.decided_at,
               })),
             };
@@ -74,8 +78,11 @@ export const ReviewQueuePage: React.FC = () => {
               slot: {
                 id: slot.id,
                 slot_index: 0,
+                slot_role: slot.slot_role,
                 required_role: slot.slot_role,
+                assigned_sub: slot.assigned_sub,
                 status: slot.status,
+                rationale: slot.rationale,
                 decision_rationale: slot.rationale,
               },
             });
@@ -111,7 +118,7 @@ export const ReviewQueuePage: React.FC = () => {
       try {
         const data = await apiFetch(`/api/requests/${selectedItem.request.id}/assistance`);
         setAssistanceData(data);
-      } catch (err) {
+      } catch {
         setAssistanceData(null);
       } finally {
         setIsLoadingAssistance(false);
@@ -124,17 +131,20 @@ export const ReviewQueuePage: React.FC = () => {
   const handleSubmitDecision = async (
     decision: 'approve' | 'narrow' | 'reject',
     rationale: string,
-    narrowedLimits?: ResourceLimits
+    narrowedLimits?: { actions?: string[]; duration_minutes?: number }
   ) => {
     if (!activeDrawerItem) return;
 
     const payload: any = {
       slot_id: activeDrawerItem.slot.id,
       decision,
-      rationale,
+      rationale: rationale || null,
     };
     if (decision === 'narrow' && narrowedLimits) {
-      payload.approved_limits = narrowedLimits;
+      payload.approved_limits = {
+        actions: narrowedLimits.actions || activeDrawerItem.request.actions,
+        duration_minutes: narrowedLimits.duration_minutes || activeDrawerItem.request.duration_minutes,
+      };
     }
 
     await apiFetch(`/api/requests/${activeDrawerItem.request.id}/decisions`, {
@@ -321,18 +331,23 @@ export const ReviewQueuePage: React.FC = () => {
                     </div>
 
                     {/* Reviewer Guidance for Active Slot */}
-                    {assistanceData.guidance && assistanceData.guidance[selectedItem.slot.required_role] && (
-                      <div style={{ background: 'var(--bg-subtle)', borderRadius: '6px', padding: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--accent-wine)' }}>
-                          {assistanceData.guidance[selectedItem.slot.required_role].title}
+                    {(() => {
+                      const roleKey = selectedItem.slot.slot_role || selectedItem.slot.required_role || 'manager';
+                      const guidance = assistanceData.guidance ? (assistanceData.guidance[roleKey] || assistanceData.guidance['manager']) : undefined;
+                      if (!guidance) return null;
+                      return (
+                        <div style={{ background: 'var(--bg-subtle)', borderRadius: '6px', padding: '1rem', marginBottom: '1rem' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--accent-wine)' }}>
+                            {guidance.title}
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                            {guidance.focus_areas.map((fa: string, i: number) => (
+                              <li key={i}>{fa}</li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                          {assistanceData.guidance[selectedItem.slot.required_role].focus_areas.map((fa, i) => (
-                            <li key={i}>{fa}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Prior Approver Lineage */}
                     {assistanceData.lineage && assistanceData.lineage.length > 0 && (

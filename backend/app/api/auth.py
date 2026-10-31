@@ -181,19 +181,31 @@ async def dev_login(
     user_id = payload.get("user_id", "priya")
     user = db.get(User, user_id)
     if not user:
-        display_name = "Priya Sharma" if user_id == "priya" else user_id.capitalize()
+        display_name = payload.get("display_name") or ("Priya Sharma" if user_id == "priya" else user_id.capitalize())
         user = User(
             sub=user_id,
             display_name=display_name,
-            email=f"{user_id}@example.com",
+            email=payload.get("email") or f"{user_id}@example.com",
+            manager_sub="E050" if user_id != "E050" else "E002",
+            department="Engineering",
             active=True,
         )
         db.add(user)
         db.commit()
+    else:
+        changed = False
+        if not user.manager_sub:
+            user.manager_sub = "E050" if user.sub != "E050" else "E002"
+            changed = True
+        if not getattr(user, "department", None):
+            user.department = "Engineering"
+            changed = True
+        if changed:
+            db.commit()
 
     # Ensure demo roles are populated
     existing_roles = set(db.execute(select(UserRole.role).where(UserRole.sub == user.sub)).scalars().all())
-    expected_roles = DEFAULT_PERSONA_ROLES.get(user_id, [])
+    expected_roles = DEFAULT_PERSONA_ROLES.get(user_id, ["requester"])
     for r in expected_roles:
         if r not in existing_roles:
             db.add(UserRole(sub=user.sub, role=r))

@@ -362,7 +362,7 @@ export const DashboardPage: React.FC = () => {
                   <div className="action-info">
                     <span className="action-req-code font-mono">{req.id}</span>
                     <h3 className="action-req-title">{req.resource_name || req.resource_id}</h3>
-                    <p className="action-req-author">Requested by {req.requester_name || req.requester_id}</p>
+                    <p className="action-req-author">Requested by {req.requester_name || req.requester_sub || req.requester_id}</p>
                   </div>
                 </div>
 

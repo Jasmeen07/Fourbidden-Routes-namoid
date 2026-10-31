@@ -27,37 +27,56 @@ export interface Resource {
 }
 
 export type RequestStatus = 'IN_REVIEW' | 'BLOCKED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
-export type SlotStatus = 'PENDING' | 'APPROVED' | 'NARROWED' | 'REJECTED';
+export type SlotStatus = 'PENDING' | 'APPROVED' | 'NARROWED' | 'REJECTED' | 'CANCELLED';
 
 export interface ReviewSlot {
   id: string;
-  slot_index: number;
-  required_role: string;
+  slot_index?: number;
+  slot_role: string;
+  required_role?: string;
+  assigned_sub?: string;
   assigned_to_user_id?: string;
   assigned_to_user_name?: string;
   status: SlotStatus;
+  decision?: string;
+  rationale?: string;
   decision_rationale?: string;
+  approved_limits?: {
+    actions?: string[];
+    duration_minutes?: number;
+    [key: string]: any;
+  };
   narrowed_limits?: ResourceLimits;
+  decided_by_sub?: string;
   decided_at?: string;
 }
 
 export interface AccessRequest {
   id: string;
-  requester_id: string;
+  requester_sub: string;
+  requester_id?: string;
   requester_name?: string;
   requester_role?: string;
   resource_id: string;
   resource_name?: string;
   resource_tier?: ResourceTier;
-  duration_hours: number;
-  purpose: string;
-  justification: string;
-  requested_limits: ResourceLimits;
-  required_controls: string[];
+  purpose_code: string;
+  purpose_text?: string;
+  purpose?: string;
+  justification?: string;
+  actions: string[];
+  duration_minutes: number;
+  duration_hours?: number;
+  risk_controls: string[];
+  required_controls?: string[];
+  requested_limits?: ResourceLimits;
   status: RequestStatus;
   created_at: string;
   closed_at?: string;
+  slots_count?: number;
+  pending_slots?: string[];
   slots: ReviewSlot[];
+  is_crucial?: boolean;
 }
 
 export type GrantStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
@@ -65,20 +84,25 @@ export type GrantStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
 export interface Grant {
   id: string;
   request_id: string;
-  subject_id: string;
+  subject_id?: string;
   subject_name?: string;
-  requester_sub?: string;
+  requester_sub: string;
   resource_id: string;
   resource_name?: string;
   resource_tier?: ResourceTier;
-  granted_limits: ResourceLimits;
-  duration_seconds: number;
+  purpose_code?: string;
+  actions: string[];
+  granted_limits?: ResourceLimits;
+  duration_seconds?: number;
   status: GrantStatus;
-  effective_status: GrantStatus;
-  created_at: string;
+  effective_status?: GrantStatus;
+  activated_at?: string;
+  created_at?: string;
   expires_at: string;
   revoked_at?: string;
   revocation_reason?: string;
+  revoke_reason_code?: string;
+  revoke_emergency?: boolean;
   is_emergency?: boolean;
   last_used_at?: string;
   invocation_count?: number;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Resource, ResourceLimits, ApprovalPreviewResponse } from '../types';
+import { Resource, ApprovalPreviewResponse } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, FileCode, Sparkles, ArrowRight, UserCheck, Bot } from 'lucide-react';
+import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, Sparkles, ArrowRight, Check } from 'lucide-react';
 
 const SECRET_PATTERNS = [
   /sk-[a-zA-Z0-9_-]{20,}/i,
@@ -13,13 +13,23 @@ const SECRET_PATTERNS = [
   /BEGIN\s+PRIVATE\s+KEY/i,
 ];
 
-const PREDEFINED_PURPOSES = [
-  'Customer Support Chatbot Fine-Tuning',
-  'Fraud Detection Model Evaluation',
-  'Quarterly Financial Analysis & Reporting',
-  'Safety & Red-Teaming Research',
-  'Medical Imaging Diagnostics Verification',
-  'Compliance & Privacy Audit',
+const POLICY_PURPOSES = [
+  { code: 'MODEL_EVALUATION', label: 'Model Evaluation & Benchmark' },
+  { code: 'BIAS_AUDIT', label: 'Fairness & Bias Audit' },
+  { code: 'FRAUD_RULE_TUNING', label: 'Fraud Detection Rule Tuning' },
+  { code: 'PROTOTYPE_DEMO', label: 'Prototype Demo & Research' },
+  { code: 'SECURITY_REDTEAM_SIM', label: 'Security Red-Teaming Simulation' },
+  { code: 'ANALYTICS_REPORTING', label: 'Quarterly Analytics & Reporting' },
+];
+
+const RISK_CONTROLS_CATALOG = [
+  { code: 'activity_logging', label: 'Activity Logging & PDP Audit Trail' },
+  { code: 'synthetic_data_only', label: 'Synthetic Data Only (No Production Data)' },
+  { code: 'isolated_workspace', label: 'Isolated Execution Workspace' },
+  { code: 'output_filtering', label: 'Output Redaction & Filtering' },
+  { code: 'no_export', label: 'No Raw Data Export' },
+  { code: 'human_review_of_outputs', label: 'Human-in-the-Loop Review of Outputs' },
+  { code: 'retention_limit_declared', label: 'Strict Retention Limit Declared' },
 ];
 
 export const NewRequestPage: React.FC = () => {
@@ -31,17 +41,14 @@ export const NewRequestPage: React.FC = () => {
   const [resources, setResources] = useState<Resource[]>([]);
   const [selectedResourceId, setSelectedResourceId] = useState<string>(initialResourceId);
   const [durationHours, setDurationHours] = useState<number>(24);
-  const [purpose, setPurpose] = useState<string>(PREDEFINED_PURPOSES[0]);
-  const [justification, setJustification] = useState<string>('');
-  const [maxRecords, setMaxRecords] = useState<number>(5000);
-  const [maxRps, setMaxRps] = useState<number>(10);
-  const [maxCost, setMaxCost] = useState<number>(50);
-  const [allowedFormats, setAllowedFormats] = useState<string[]>(['json']);
-  const [ipAllowlist, setIpAllowlist] = useState<string>('10.0.0.0/16');
+  const [purposeCode, setPurposeCode] = useState<string>(POLICY_PURPOSES[0].code);
+  const [justification, setJustification] = useState<string>('Evaluation of model reasoning and accuracy boundaries for quarterly safety report.');
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [acknowledgedControls, setAcknowledgedControls] = useState<string[]>([]);
 
   const [hasSecretWarning, setHasSecretWarning] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [approvalPreview, setApprovalPreview] = useState<ApprovalPreviewResponse | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
 
@@ -55,7 +62,7 @@ export const NewRequestPage: React.FC = () => {
           type: r.type || r.kind || 'MODEL',
           description: r.description || `Enterprise governed ${r.kind || 'resource'} under tier ${r.tier}`,
           max_duration_hours: r.max_duration_hours || (r.tier === 'RESTRICTED_SYNTHETIC' || r.tier === 'TIER_1_CRITICAL' ? 24 : 72),
-          required_controls: r.required_controls || ['activity_logging', 'synthetic_data_only'],
+          required_controls: r.required_controls || (r.tier === 'RESTRICTED_SYNTHETIC' ? ['activity_logging', 'synthetic_data_only', 'isolated_workspace'] : ['activity_logging', 'synthetic_data_only']),
           department: r.department || 'General',
           is_crucial: !!r.is_crucial,
         }));
@@ -72,10 +79,15 @@ export const NewRequestPage: React.FC = () => {
 
   const selectedResource = resources.find((r) => r.id === selectedResourceId);
 
-  // Set default acknowledged controls when resource changes
+  // Set default actions and required controls when resource changes
   useEffect(() => {
     if (selectedResource) {
-      setAcknowledgedControls(selectedResource.required_controls || []);
+      const acts = (selectedResource.allowed_actions || []).map((a: any) => typeof a === 'string' ? a : a.name);
+      setSelectedActions(acts);
+
+      const reqCtrls = selectedResource.required_controls || ['activity_logging', 'synthetic_data_only'];
+      setAcknowledgedControls(Array.from(new Set([...reqCtrls, 'activity_logging'])));
+
       if (durationHours > selectedResource.max_duration_hours) {
         setDurationHours(selectedResource.max_duration_hours);
       }
@@ -98,7 +110,7 @@ export const NewRequestPage: React.FC = () => {
         const requesterId = user?.sub || 'E102';
         const res = await apiFetch(`/api/hierarchy/preview-approval?requester_id=${requesterId}&resource_id=${selectedResourceId}`);
         setApprovalPreview(res);
-      } catch (err) {
+      } catch {
         setApprovalPreview(null);
       } finally {
         setIsLoadingPreview(false);
@@ -108,25 +120,46 @@ export const NewRequestPage: React.FC = () => {
     loadApprovalPath();
   }, [selectedResourceId, user]);
 
+  const handleActionToggle = (actionName: string) => {
+    if (selectedActions.includes(actionName)) {
+      if (selectedActions.length > 1) {
+        setSelectedActions(selectedActions.filter((a) => a !== actionName));
+      }
+    } else {
+      setSelectedActions([...selectedActions, actionName]);
+    }
+  };
+
+  const handleControlToggle = (controlCode: string) => {
+    if (acknowledgedControls.includes(controlCode)) {
+      setAcknowledgedControls(acknowledgedControls.filter((c) => c !== controlCode));
+    } else {
+      setAcknowledgedControls([...acknowledgedControls, controlCode]);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedResourceId) return;
+    if (selectedActions.length === 0) {
+      setSubmitError('At least one action must be selected.');
+      return;
+    }
+    if (!justification.trim()) {
+      setSubmitError('Please provide an accountable business justification.');
+      return;
+    }
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const payload = {
         resource_id: selectedResourceId,
-        duration_hours: durationHours,
-        purpose,
-        justification,
-        requested_limits: {
-          max_records: maxRecords,
-          max_rps: maxRps,
-          max_cost_usd: maxCost,
-          allowed_formats: allowedFormats,
-          ip_allowlist: ipAllowlist.split(',').map((s) => s.trim()).filter(Boolean),
-        },
-        required_controls: acknowledgedControls,
+        purpose_code: purposeCode,
+        purpose_text: justification.trim(),
+        actions: selectedActions,
+        duration_minutes: durationHours * 60,
+        risk_controls: acknowledgedControls,
       };
 
       await apiFetch('/api/requests', {
@@ -135,12 +168,17 @@ export const NewRequestPage: React.FC = () => {
       });
 
       navigate('/requests');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Submission failed', err);
+      setSubmitError(err?.message || err?.detail?.message || 'Failed to submit request. Please check policy bounds.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const allowedActionNames = selectedResource
+    ? (selectedResource.allowed_actions || []).map((a: any) => (typeof a === 'string' ? a : a.name))
+    : [];
 
   return (
     <div>
@@ -153,11 +191,18 @@ export const NewRequestPage: React.FC = () => {
         </div>
       </div>
 
+      {submitError && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '1rem', borderRadius: '8px', color: '#991b1b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <AlertTriangle size={18} />
+          <span>{submitError}</span>
+        </div>
+      )}
+
       <div className="grid-2">
         {/* Left Form */}
         <form onSubmit={handleSubmit} className="glass-panel" id="request-form" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
           <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1.25rem' }}>
-            Request Parameters
+            Request Specification
           </h3>
 
           {/* 1. Resource Selector */}
@@ -177,12 +222,33 @@ export const NewRequestPage: React.FC = () => {
             </select>
           </div>
 
-          {/* 2. Duration Slider */}
+          {/* 2. Actions Selector */}
+          <div className="form-group">
+            <label className="form-label" style={{ color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Requested Operations (Actions)</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Must be subset of resource actions</span>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              {allowedActionNames.map((act) => (
+                <label key={act} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedActions.includes(act)}
+                    onChange={() => handleActionToggle(act)}
+                    style={{ accentColor: 'var(--accent-primary)' }}
+                  />
+                  <span className="font-mono">{act}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Duration Slider */}
           <div className="form-group">
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <label className="form-label" htmlFor="duration-slider" style={{ color: 'var(--text-primary)' }}>Duration (Hours)</label>
               <span className="font-mono" style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>
-                {durationHours} hours
+                {durationHours} hours ({durationHours * 60} mins)
               </span>
             </div>
             <input
@@ -196,22 +262,22 @@ export const NewRequestPage: React.FC = () => {
             />
           </div>
 
-          {/* 3. Purpose */}
+          {/* 4. Purpose Code */}
           <div className="form-group">
             <label className="form-label" htmlFor="purpose-select" style={{ color: 'var(--text-primary)' }}>Declared Business Purpose</label>
             <select
               id="purpose-select"
               className="form-select"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
+              value={purposeCode}
+              onChange={(e) => setPurposeCode(e.target.value)}
             >
-              {PREDEFINED_PURPOSES.map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {POLICY_PURPOSES.map((p) => (
+                <option key={p.code} value={p.code}>{p.label} ({p.code})</option>
               ))}
             </select>
           </div>
 
-          {/* 4. Justification */}
+          {/* 5. Justification */}
           <div className="form-group">
             <label className="form-label" htmlFor="justification-input" style={{ color: 'var(--text-primary)' }}>Accountable Justification</label>
             <textarea
@@ -233,84 +299,41 @@ export const NewRequestPage: React.FC = () => {
             )}
           </div>
 
-          {/* 5. Limits Bounds */}
-          <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-secondary)', marginTop: '1.25rem', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Resource Limits Specification
-          </h4>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="max-records-input" style={{ color: 'var(--text-primary)' }}>Max Records</label>
-              <input
-                id="max-records-input"
-                type="number"
-                className="form-input"
-                value={maxRecords}
-                onChange={(e) => setMaxRecords(Number(e.target.value))}
-                min="1"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="max-rps-input" style={{ color: 'var(--text-primary)' }}>Max RPS (Rate Limit)</label>
-              <input
-                id="max-rps-input"
-                type="number"
-                className="form-input"
-                value={maxRps}
-                onChange={(e) => setMaxRps(Number(e.target.value))}
-                min="1"
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="ip-allowlist-input" style={{ color: 'var(--text-primary)' }}>Client IP / CIDR Allowlist</label>
-            <input
-              id="ip-allowlist-input"
-              type="text"
-              className="form-input"
-              value={ipAllowlist}
-              onChange={(e) => setIpAllowlist(e.target.value)}
-              placeholder="10.0.0.0/16, 192.168.1.5"
-            />
-          </div>
-
           {/* 6. Required Controls Acknowledgement */}
-          {selectedResource?.required_controls && selectedResource.required_controls.length > 0 && (
-            <div className="form-group">
-              <label className="form-label" style={{ color: 'var(--text-primary)' }}>Mandatory Control Acknowledgements</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                {selectedResource.required_controls.map((ctrl) => (
-                  <label key={ctrl} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+          <div className="form-group">
+            <label className="form-label" style={{ color: 'var(--text-primary)' }}>Mandatory Risk Controls</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              {RISK_CONTROLS_CATALOG.map((ctrl) => {
+                const isRequired = selectedResource?.required_controls?.includes(ctrl.code);
+                return (
+                  <label key={ctrl.code} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                     <input
                       type="checkbox"
-                      checked={acknowledgedControls.includes(ctrl)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setAcknowledgedControls([...acknowledgedControls, ctrl]);
-                        } else {
-                          setAcknowledgedControls(acknowledgedControls.filter((c) => c !== ctrl));
-                        }
-                      }}
+                      checked={acknowledgedControls.includes(ctrl.code)}
+                      onChange={() => handleControlToggle(ctrl.code)}
                       style={{ accentColor: 'var(--accent-primary)' }}
                     />
-                    <span className="font-mono">{ctrl}</span>
+                    <span>{ctrl.label}</span>
+                    {isRequired && (
+                      <span className="badge font-mono" style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
+                        REQUIRED
+                      </span>
+                    )}
                   </label>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           <button
             type="submit"
             className="btn btn-primary"
             style={{ width: '100%', marginTop: '1rem' }}
-            disabled={isSubmitting || hasSecretWarning || !justification.trim()}
+            disabled={isSubmitting || hasSecretWarning || !justification.trim() || selectedActions.length === 0}
             id="submit-request-btn"
           >
             <Send size={16} />
-            <span>{isSubmitting ? 'Routing to Review Slots...' : 'Submit Access Request'}</span>
+            <span>{isSubmitting ? 'Routing to Review Slots...' : 'Submit Governed Access Request'}</span>
           </button>
         </form>
 
@@ -348,8 +371,8 @@ export const NewRequestPage: React.FC = () => {
 
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
                   {approvalPreview.is_crucial
-                    ? 'This request targets high-sensitivity/crucial assets. Per FORGE Datalog policies, it requires multi-tier escalation to the Immediate Superior, Higher-Level Executive, Resource Owner, and Security Officer.'
-                    : 'Standard internal request: requires only immediate manager approval.'}
+                    ? 'This request targets high-sensitivity or crucial assets. Per FORGE Datalog policies, it requires multi-tier escalation to the Immediate Superior, Higher-Level Executive, Resource Owner, and Security Officer.'
+                    : 'Standard internal request: requires immediate manager approval.'}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
@@ -387,4 +410,3 @@ export const NewRequestPage: React.FC = () => {
     </div>
   );
 };
-

@@ -71,7 +71,7 @@ class RequestsService:
             raise DomainError(f"Resource '{resource_id}' is not found or inactive", code="VALIDATION_FAILED", status_code=404)
 
         # 3. Validate actions
-        resource_actions = {a["name"] for a in resource.allowed_actions}
+        resource_actions = {a["name"] if isinstance(a, dict) else a for a in resource.allowed_actions}
         if not actions or not set(actions).issubset(resource_actions):
             raise DomainError("Requested actions must be non-empty and offered by resource", code="VALIDATION_FAILED", status_code=422)
 
@@ -206,8 +206,24 @@ class RequestsService:
                     assigned_sub = owner_user.manager_sub if owner_user else None
                 else:
                     assigned_sub = requester.manager_sub if requester else None
+                if not assigned_sub or assigned_sub == requester_sub:
+                    mgr_candidates = db.execute(
+                        select(UserRole.sub).where(UserRole.role == "manager")
+                    ).scalars().all()
+                    for m in mgr_candidates:
+                        if m != requester_sub:
+                            assigned_sub = m
+                            break
             elif role == "resource_owner":
                 assigned_sub = resource.owner_sub
+                if not assigned_sub or assigned_sub == requester_sub or assigned_sub in assigned_subs:
+                    ro_candidates = db.execute(
+                        select(UserRole.sub).where(UserRole.role == "resource_owner")
+                    ).scalars().all()
+                    for r in ro_candidates:
+                        if r != requester_sub and r not in assigned_subs:
+                            assigned_sub = r
+                            break
             elif role == "risk_reviewer":
                 candidates = db.execute(
                     select(UserRole.sub).where(UserRole.role == "risk_reviewer")

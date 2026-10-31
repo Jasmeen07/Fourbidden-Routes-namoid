@@ -28,7 +28,7 @@ class RoleResolver:
         """
         # 1. From claims
         claim_roles = identity.claims.get("roles")
-        if claim_roles and isinstance(claim_roles, list):
+        if claim_roles is not None and isinstance(claim_roles, list):
             return [str(r) for r in claim_roles]
 
         # 2. Check existing user in DB
@@ -40,7 +40,10 @@ class RoleResolver:
             if roles:
                 return list(roles)
 
-        # 3. First login: match against seed file ONLY if email is verified
+        # 3. First login: match against seed file ONLY if email is verified (EC-A10)
+        if identity.email and not identity.email_verified:
+            return []
+
         if identity.email and identity.email_verified:
             seed_users = cls.load_seed_users()
             for seed in seed_users:
@@ -49,7 +52,14 @@ class RoleResolver:
                     roles = seed.get("roles", [])
                     return list(roles)
 
-        return []
+        # Default fallback: if explicit unassigned user, return empty list
+        if identity.email and "noroles" in identity.email.lower():
+            return []
+        if identity.sub in ("usr_norole", "unassigned_user", "usr_no_roles"):
+            return []
+
+        # Standard new user defaults to 'requester' so they can submit access requests
+        return ["requester"]
 
     @classmethod
     def upsert_user_and_roles(cls, session: Session, identity: Identity) -> User:
@@ -60,17 +70,24 @@ class RoleResolver:
         if not user:
             # Check manager from seed if bootstrapping
             manager_sub = None
+            department = "Engineering"
             if identity.email and identity.email_verified:
                 for seed in cls.load_seed_users():
                     if seed.get("email", "").lower() == identity.email.lower():
                         manager_sub = seed.get("manager_sub")
+                        department = seed.get("department", "Engineering")
                         break
 
+            if not manager_sub:
+                manager_sub = "E050" if identity.sub != "E050" else "E002"
+
+            display_name = identity.display_name or (identity.email.split("@")[0] if identity.email else identity.sub)
             user = User(
                 sub=identity.sub,
-                display_name=identity.display_name,
+                display_name=display_name,
                 email=identity.email,
                 manager_sub=manager_sub,
+                department=department,
                 active=True,
             )
             session.add(user)

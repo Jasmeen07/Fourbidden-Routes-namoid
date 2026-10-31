@@ -66,8 +66,8 @@ export const SimulatorPage: React.FC = () => {
 
   const fetchGrants = async () => {
     try {
-      const res = await apiFetch('/api/grants');
-      const list = res.grants || [];
+      const res = await apiFetch('/api/grants?scope=visible&status=all');
+      const list = Array.isArray(res) ? res : (res.grants || []);
       setGrants(list);
       if (!selectedGrantId && list.length > 0) {
         setSelectedGrantId(list[0].id);
