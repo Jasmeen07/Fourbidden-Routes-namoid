@@ -7,9 +7,13 @@ export const ProblemModal: React.FC = () => {
 
   if (!problem) return null;
 
-  const code = problem.code || (problem.status ? `HTTP_${problem.status}` : 'ERROR');
-  const message = problem.message || problem.detail || 'An unexpected error occurred.';
-  const violations = problem.violations || [];
+  const code = (typeof problem === 'object' && problem?.code) 
+    ? problem.code 
+    : (typeof problem === 'object' && problem?.status ? `HTTP_${problem.status}` : 'ERROR');
+  const message = typeof problem === 'string'
+    ? problem
+    : (problem?.message || problem?.detail || problem?.title || 'An unexpected error occurred.');
+  const violations = (typeof problem === 'object' && Array.isArray(problem?.violations)) ? problem.violations : [];
 
   return (
     <div className="modal-overlay" onClick={clearProblem} id="problem-modal">

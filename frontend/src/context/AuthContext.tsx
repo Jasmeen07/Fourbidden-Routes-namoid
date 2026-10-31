@@ -72,7 +72,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        setProblem(errJson.detail || { code: 'AUTH_ERROR', message: 'Failed to switch persona' });
+        const detailMsg = typeof errJson.detail === 'string' 
+          ? errJson.detail 
+          : (errJson.message || `Failed to authenticate (Status ${res.status})`);
+        setProblem({ code: errJson.code || `HTTP_${res.status}`, message: detailMsg });
         return;
       }
 
@@ -116,9 +119,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok) {
       const isJson = res.headers.get('content-type')?.includes('json');
       const errBody = isJson ? await res.json().catch(() => ({})) : await res.text();
-      const prob: ProblemDetail = typeof errBody === 'object' 
-        ? (errBody.detail || errBody)
-        : { code: `HTTP_${res.status}`, message: String(errBody) };
+      let prob: ProblemDetail;
+      if (typeof errBody === 'object' && errBody !== null) {
+        if (typeof errBody.detail === 'string') {
+          prob = { code: errBody.code || `HTTP_${res.status}`, message: errBody.detail };
+        } else if (typeof errBody.detail === 'object') {
+          prob = errBody.detail;
+        } else {
+          prob = errBody;
+        }
+      } else {
+        prob = { code: `HTTP_${res.status}`, message: String(errBody) };
+      }
 
       setProblem(prob);
       throw prob;
