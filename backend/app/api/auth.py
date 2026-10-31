@@ -153,6 +153,7 @@ async def dev_login(
 ):
     """Convenience login for testing, local demo, and persona switching."""
     DEFAULT_PERSONA_ROLES = {
+        "priya": ["requester", "ML_ENGINEER"],
         "alice": ["requester", "ML_ENGINEER"],
         "usr_req_a": ["requester", "ML_ENGINEER"],
         "bob": ["requester", "risk_reviewer", "ML_ENGINEER"],
@@ -169,12 +170,13 @@ async def dev_login(
         "usr_no_roles": [],
     }
 
-    user_id = payload.get("user_id", "alice")
+    user_id = payload.get("user_id", "priya")
     user = db.get(User, user_id)
     if not user:
+        display_name = "Priya Sharma" if user_id == "priya" else user_id.capitalize()
         user = User(
             sub=user_id,
-            display_name=user_id.capitalize(),
+            display_name=display_name,
             email=f"{user_id}@example.com",
             active=True,
         )

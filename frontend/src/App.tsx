@@ -2,8 +2,10 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { SafetyBanner } from './components/SafetyBanner';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
+import { TopHeader } from './components/TopHeader';
 import { ProblemModal } from './components/ProblemModal';
+import { DashboardPage } from './pages/DashboardPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { NewRequestPage } from './pages/NewRequestPage';
 import { RequestsListPage } from './pages/RequestsListPage';
@@ -12,36 +14,45 @@ import { GrantsPage } from './pages/GrantsPage';
 import { SimulatorPage } from './pages/SimulatorPage';
 import { AuditExplorerPage } from './pages/AuditExplorerPage';
 import { PolicyLinterPage } from './pages/PolicyLinterPage';
+import { RelationshipViewPage } from './pages/RelationshipViewPage';
 
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <div className="app-container">
-          {/* Mandatory Blueprint §12.1 Safety Banner */}
-          <SafetyBanner />
+        <div className="grantgate-layout">
+          {/* Left Dark Wine Sidebar matching the image */}
+          <Sidebar />
 
-          {/* Navigation Bar & Persona Switcher */}
-          <Navbar />
+          {/* Right Main Column */}
+          <div className="grantgate-main-wrapper">
+            {/* Mandatory Blueprint §11.3 / §12.1 Safety Banner */}
+            <SafetyBanner />
 
-          {/* RFC 9457 Global Problem Details Modal */}
-          <ProblemModal />
+            {/* Top Bar Header with search pill, user profile, notifications & spiderweb */}
+            <TopHeader />
 
-          {/* Main Content Router */}
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<Navigate to="/catalog" replace />} />
-              <Route path="/catalog" element={<CatalogPage />} />
-              <Route path="/requests" element={<RequestsListPage />} />
-              <Route path="/requests/new" element={<NewRequestPage />} />
-              <Route path="/reviews" element={<ReviewQueuePage />} />
-              <Route path="/grants" element={<GrantsPage />} />
-              <Route path="/simulator" element={<SimulatorPage />} />
-              <Route path="/audit" element={<AuditExplorerPage />} />
-              <Route path="/policy" element={<PolicyLinterPage />} />
-              <Route path="*" element={<Navigate to="/catalog" replace />} />
-            </Routes>
-          </main>
+            {/* RFC 9457 Global Problem Details Modal */}
+            <ProblemModal />
+
+            {/* Main Content Router */}
+            <main className="main-viewport-content">
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/catalog" element={<CatalogPage />} />
+                <Route path="/requests" element={<RequestsListPage />} />
+                <Route path="/requests/new" element={<NewRequestPage />} />
+                <Route path="/reviews" element={<ReviewQueuePage />} />
+                <Route path="/relationships" element={<RelationshipViewPage />} />
+                <Route path="/grants" element={<GrantsPage />} />
+                <Route path="/simulator" element={<SimulatorPage />} />
+                <Route path="/audit" element={<AuditExplorerPage />} />
+                <Route path="/policy" element={<PolicyLinterPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </main>
+          </div>
         </div>
       </AuthProvider>
     </BrowserRouter>

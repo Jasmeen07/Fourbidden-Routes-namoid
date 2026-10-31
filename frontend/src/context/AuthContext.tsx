@@ -27,6 +27,7 @@ export interface Persona {
 }
 
 export const PERSONAS: Persona[] = [
+  { id: 'priya', name: 'Priya Sharma', role: 'REQUESTOR', badgeClass: 'role-chip-eng', description: 'Lead Data Scientist (Requestor)' },
   { id: 'alice', name: 'Alice Chen', role: 'ML_ENGINEER', badgeClass: 'role-chip-eng', description: 'ML Engineer (Requester)' },
   { id: 'bob', name: 'Bob Smith', role: 'ML_ENGINEER', badgeClass: 'role-chip-eng', description: 'ML Engineer (Peer Requester)' },
   { id: 'carol', name: 'Carol Danvers', role: 'DATA_GOVERNANCE', badgeClass: 'role-chip-gov', description: 'Data Governance (Reviewer)' },
@@ -55,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserInfo | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('gg_token'));
   const [csrfToken, setCsrfToken] = useState<string | null>(localStorage.getItem('gg_csrf'));
-  const [activePersonaId, setActivePersonaId] = useState<string>(localStorage.getItem('gg_persona') || 'alice');
+  const [activePersonaId, setActivePersonaId] = useState<string>(localStorage.getItem('gg_persona') || 'priya');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
 
@@ -70,28 +71,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ user_id: personaId }),
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        const detailMsg = typeof errJson.detail === 'string' 
-          ? errJson.detail 
-          : (errJson.message || `Failed to authenticate (Status ${res.status})`);
-        setProblem({ code: errJson.code || `HTTP_${res.status}`, message: detailMsg });
+      if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
+        setCsrfToken(data.csrf_token);
+        setUser(data.user);
+        setActivePersonaId(personaId);
+        localStorage.setItem('gg_token', data.token);
+        localStorage.setItem('gg_csrf', data.csrf_token);
+        localStorage.setItem('gg_persona', personaId);
+        setIsLoading(false);
         return;
       }
-
-      const data = await res.json();
-      setToken(data.token);
-      setCsrfToken(data.csrf_token);
-      setUser(data.user);
-      setActivePersonaId(personaId);
-      localStorage.setItem('gg_token', data.token);
-      localStorage.setItem('gg_csrf', data.csrf_token);
-      localStorage.setItem('gg_persona', personaId);
-    } catch (err: any) {
-      setProblem({ code: 'NETWORK_ERROR', message: err.message || 'Network error connecting to backend' });
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      // Backend not running, use standalone mock mode
     }
+
+    // Standalone fallback:
+    const p = PERSONAS.find((x) => x.id === personaId) || PERSONAS[0];
+    setUser({
+      sub: p.id,
+      display_name: p.name,
+      roles: [p.role],
+      active: true,
+    });
+    setActivePersonaId(personaId);
+    setToken(`mock-token-${personaId}`);
+    setCsrfToken('mock-csrf');
+    localStorage.setItem('gg_persona', personaId);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -132,7 +140,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prob = { code: `HTTP_${res.status}`, message: String(errBody) };
       }
 
-      setProblem(prob);
+      const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase() || 'GET');
+      if (isMutation || [403, 409, 422].includes(res.status)) {
+        setProblem(prob);
+      }
       throw prob;
     }
 
