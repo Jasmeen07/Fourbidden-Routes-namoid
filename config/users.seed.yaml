@@ -1,8 +1,179 @@
 users:
+  # FORGE Enterprise Hierarchy (§7.1, §7.2)
+  - sub: "E001"
+    display_name: "Eleanor Vance (CEO)"
+    email: "e001.ceo@grantgate.corp"
+    employee_id: "E001"
+    role: "CEO"
+    department: "Executive"
+    manager_sub: null
+    is_agent: false
+    active: true
+    roles:
+      - "executive"
+      - "manager"
+
+  - sub: "E002"
+    display_name: "Marcus Chen (CTO)"
+    email: "e002.cto@grantgate.corp"
+    employee_id: "E002"
+    role: "CTO"
+    department: "Engineering"
+    manager_sub: "E001"
+    is_agent: false
+    active: true
+    roles:
+      - "executive"
+      - "manager"
+
+  - sub: "E003"
+    display_name: "Sophia Sterling (CFO)"
+    email: "e003.cfo@grantgate.corp"
+    employee_id: "E003"
+    role: "CFO"
+    department: "Finance"
+    manager_sub: "E001"
+    is_agent: false
+    active: true
+    roles:
+      - "executive"
+      - "manager"
+
+  - sub: "E050"
+    display_name: "David Kim (Engineering Manager)"
+    email: "e050.engmgr@grantgate.corp"
+    employee_id: "E050"
+    role: "Engineering Manager"
+    department: "Engineering"
+    manager_sub: "E002"
+    is_agent: false
+    active: true
+    roles:
+      - "manager"
+      - "resource_owner"
+
+  - sub: "E102"
+    display_name: "Alice Developer (Senior Developer)"
+    email: "e102.dev@grantgate.corp"
+    employee_id: "E102"
+    role: "Developer"
+    department: "Engineering"
+    manager_sub: "E050"
+    is_agent: false
+    active: true
+    roles:
+      - "requester"
+
+  - sub: "AG102"
+    display_name: "ForgeDev AI Agent (Engineering Assistant)"
+    email: "ag102.agent@grantgate.corp"
+    employee_id: "AG102"
+    role: "AI Agent"
+    department: "Engineering"
+    manager_sub: "E050"
+    is_agent: true
+    owner_sub: "E102"
+    delegated_permissions:
+      - "view_metadata"
+      - "query"
+      - "read_sample"
+      - "read_full"
+    active: true
+    roles:
+      - "requester"
+
+  - sub: "E060"
+    display_name: "Franklin Harris (Finance Manager)"
+    email: "e060.finmgr@grantgate.corp"
+    employee_id: "E060"
+    role: "Finance Manager"
+    department: "Finance"
+    manager_sub: "E003"
+    is_agent: false
+    active: true
+    roles:
+      - "manager"
+      - "resource_owner"
+
+  - sub: "E201"
+    display_name: "Chloe Bennett (Finance Analyst)"
+    email: "e201.analyst@grantgate.corp"
+    employee_id: "E201"
+    role: "Finance Analyst"
+    department: "Finance"
+    manager_sub: "E060"
+    is_agent: false
+    active: true
+    roles:
+      - "requester"
+
+  - sub: "AG201"
+    display_name: "ForgeFin AI Agent (Finance Assistant)"
+    email: "ag201.agent@grantgate.corp"
+    employee_id: "AG201"
+    role: "AI Agent"
+    department: "Finance"
+    manager_sub: "E060"
+    is_agent: true
+    owner_sub: "E201"
+    delegated_permissions:
+      - "view_metadata"
+      - "query"
+      - "read_sample"
+    active: true
+    roles:
+      - "requester"
+
+  - sub: "R001"
+    display_name: "Rachel Ramos (Security Officer / Risk Reviewer)"
+    email: "r001.security@grantgate.corp"
+    employee_id: "R001"
+    role: "Security Officer"
+    department: "Security"
+    manager_sub: null
+    is_agent: false
+    active: true
+    roles:
+      - "risk_reviewer"
+
+  # Network Team & Network Agent
+  - sub: "E301"
+    display_name: "Nathan Drake (Network Administrator)"
+    email: "e301.netadmin@grantgate.corp"
+    employee_id: "E301"
+    role: "Network Administrator"
+    department: "Network"
+    manager_sub: "E002"
+    is_agent: false
+    active: true
+    roles:
+      - "requester"
+      - "resource_owner"
+
+  - sub: "AG301"
+    display_name: "ForgeNet AI Agent (Network Monitoring Agent)"
+    email: "ag301.agent@grantgate.corp"
+    employee_id: "AG301"
+    role: "AI Agent"
+    department: "Network"
+    manager_sub: "E002"
+    is_agent: true
+    owner_sub: "E301"
+    delegated_permissions:
+      - "read_sample"
+      - "external_send"
+    active: true
+    roles:
+      - "requester"
+
+  # Compatibility aliases for existing test suite
   - sub: "usr_req_a"
     display_name: "Alice Requester"
     email: "alice.requester@namoid.test"
+    employee_id: "E102"
+    department: "Engineering"
     manager_sub: "usr_mgr_1"
+    is_agent: false
     active: true
     roles:
       - "requester"
@@ -10,7 +181,10 @@ users:
   - sub: "usr_req_b"
     display_name: "Bob DualRole"
     email: "bob.dual@namoid.test"
+    employee_id: "E103"
+    department: "Engineering"
     manager_sub: "usr_mgr_1"
+    is_agent: false
     active: true
     roles:
       - "requester"
@@ -19,7 +193,10 @@ users:
   - sub: "usr_mgr_1"
     display_name: "Mary Manager"
     email: "mary.manager@namoid.test"
-    manager_sub: null
+    employee_id: "E050"
+    department: "Engineering"
+    manager_sub: "E002"
+    is_agent: false
     active: true
     roles:
       - "manager"
@@ -27,7 +204,10 @@ users:
   - sub: "usr_risk_1"
     display_name: "Rachel RiskReviewer"
     email: "rachel.risk@namoid.test"
+    employee_id: "R001"
+    department: "Security"
     manager_sub: null
+    is_agent: false
     active: true
     roles:
       - "risk_reviewer"
@@ -35,7 +215,10 @@ users:
   - sub: "usr_owner_1"
     display_name: "Oscar ResourceOwner"
     email: "oscar.owner@namoid.test"
-    manager_sub: null
+    employee_id: "E060"
+    department: "Finance"
+    manager_sub: "E003"
+    is_agent: false
     active: true
     roles:
       - "resource_owner"
@@ -43,7 +226,10 @@ users:
   - sub: "usr_risk_2"
     display_name: "Rita AlternateRisk"
     email: "rita.risk@namoid.test"
+    employee_id: "R002"
+    department: "Security"
     manager_sub: null
+    is_agent: false
     active: true
     roles:
       - "risk_reviewer"

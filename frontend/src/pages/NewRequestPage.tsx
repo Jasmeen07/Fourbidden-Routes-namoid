@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Resource, ResourceLimits, RiskLensEvaluation } from '../types';
+import { Resource, ResourceLimits, ApprovalPreviewResponse } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { RiskLensCard } from '../components/RiskLensCard';
-import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, FileCode, Sparkles } from 'lucide-react';
+import { Shield, Clock, AlertTriangle, Send, CheckCircle2, ChevronRight, FileCode, Sparkles, ArrowRight, UserCheck, Bot } from 'lucide-react';
 
 const SECRET_PATTERNS = [
   /sk-[a-zA-Z0-9_-]{20,}/i,
@@ -43,8 +42,8 @@ export const NewRequestPage: React.FC = () => {
 
   const [hasSecretWarning, setHasSecretWarning] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [riskEvaluation, setRiskEvaluation] = useState<RiskLensEvaluation | null>(null);
-  const [isLoadingRisk, setIsLoadingRisk] = useState<boolean>(false);
+  const [approvalPreview, setApprovalPreview] = useState<ApprovalPreviewResponse | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
 
   useEffect(() => {
     const loadResources = async () => {
@@ -57,7 +56,8 @@ export const NewRequestPage: React.FC = () => {
           description: r.description || `Enterprise governed ${r.kind || 'resource'} under tier ${r.tier}`,
           max_duration_hours: r.max_duration_hours || (r.tier === 'RESTRICTED_SYNTHETIC' || r.tier === 'TIER_1_CRITICAL' ? 24 : 72),
           required_controls: r.required_controls || ['activity_logging', 'synthetic_data_only'],
-          risk_score: r.risk_score || 50,
+          department: r.department || 'General',
+          is_crucial: !!r.is_crucial,
         }));
         setResources(normalized);
         if (!selectedResourceId && normalized.length > 0) {
@@ -88,41 +88,25 @@ export const NewRequestPage: React.FC = () => {
     setHasSecretWarning(detected);
   }, [justification]);
 
-  // Live Risk Lens evaluation (debounced)
+  // FORGE Hierarchy Approval Path preview
   useEffect(() => {
     if (!selectedResourceId) return;
 
-    const timer = setTimeout(async () => {
-      setIsLoadingRisk(true);
+    const loadApprovalPath = async () => {
+      setIsLoadingPreview(true);
       try {
-        const payload = {
-          resource_id: selectedResourceId,
-          duration_hours: durationHours,
-          purpose,
-          justification: justification || 'Evaluating model fine-tuning with compliance boundaries',
-          requested_limits: {
-            max_records: maxRecords,
-            max_rps: maxRps,
-            max_cost_usd: maxCost,
-            allowed_formats: allowedFormats,
-            ip_allowlist: ipAllowlist.split(',').map((s) => s.trim()).filter(Boolean),
-          },
-          required_controls: acknowledgedControls,
-        };
-        const evalResult = await apiFetch('/api/ai/risk-lens/evaluate', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        setRiskEvaluation(evalResult);
+        const requesterId = user?.sub || 'E102';
+        const res = await apiFetch(`/api/hierarchy/preview-approval?requester_id=${requesterId}&resource_id=${selectedResourceId}`);
+        setApprovalPreview(res);
       } catch (err) {
-        // Soft fail on advisory
+        setApprovalPreview(null);
       } finally {
-        setIsLoadingRisk(false);
+        setIsLoadingPreview(false);
       }
-    }, 400);
+    };
 
-    return () => clearTimeout(timer);
-  }, [selectedResourceId, durationHours, purpose, justification, maxRecords, maxRps, maxCost, allowedFormats, ipAllowlist, acknowledgedControls]);
+    loadApprovalPath();
+  }, [selectedResourceId, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,36 +314,77 @@ export const NewRequestPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Right Advisory Panel */}
+        {/* Right Advisory Panel: FORGE Hierarchy Routing */}
         <div>
-          <RiskLensCard
-            evaluation={riskEvaluation}
-            isLoading={isLoadingRisk}
-            onApplyRecommendation={(rec) => {
-              if (rec.dimension === 'duration_hours') {
-                setDurationHours(Number(rec.suggested_value));
-              } else if (rec.dimension === 'max_records') {
-                setMaxRecords(Number(rec.suggested_value));
-              }
-            }}
-          />
-
-          <div className="glass-panel" style={{ marginTop: '1.25rem', background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Shield size={16} color="var(--accent-primary)" />
-              <span>Multi-Party Approval Routing</span>
+          <div className="surface-card" style={{ padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+            <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Shield size={18} color="var(--accent-wine)" />
+              <span>FORGE Hierarchy Approval Routing</span>
             </h4>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-              Upon submission, GrantGate will automatically route this request through policy-governed review slots based on resource criticality:
-            </p>
-            <div style={{ fontSize: '0.825rem', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div>&bull; <strong>Tier 1 Critical:</strong> 3 sequential slots (Manager &rarr; Risk Reviewer &rarr; Resource Owner)</div>
-              <div>&bull; <strong>Tier 2 Sensitive:</strong> 2 sequential slots (Manager &rarr; Risk Reviewer)</div>
-              <div>&bull; <strong>Tier 3 Standard:</strong> 1 review slot (Manager)</div>
-            </div>
+
+            {isLoadingPreview ? (
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '1rem', textAlign: 'center' }}>
+                Calculating organizational approval path...
+              </div>
+            ) : approvalPreview ? (
+              <div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <span
+                    className="badge"
+                    style={{
+                      background: approvalPreview.is_crucial ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: approvalPreview.is_crucial ? '#ef4444' : '#10b981',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {approvalPreview.is_crucial ? 'CRUCIAL DATA / MULTI-TIER' : 'STANDARD ROUTING'}
+                  </span>
+                  {approvalPreview.is_cross_dept && (
+                    <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 700 }}>
+                      CROSS-DEPT ESCALATION
+                    </span>
+                  )}
+                </div>
+
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                  {approvalPreview.is_crucial
+                    ? 'This request targets high-sensitivity/crucial assets. Per FORGE Datalog policies, it requires multi-tier escalation to the Immediate Superior, Higher-Level Executive, Resource Owner, and Security Officer.'
+                    : 'Standard internal request: requires only immediate manager approval.'}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {approvalPreview.steps.map((stg, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        background: 'var(--bg-subtle)',
+                        borderRadius: '6px',
+                        padding: '0.75rem 0.9rem',
+                        borderLeft: stg.is_crucial_escalation ? '3px solid var(--accent-wine)' : '3px solid var(--accent-emerald)',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                        Step {stg.level}: {stg.slot_role}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.15rem' }}>
+                        {stg.title}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Reviewer: <code>{stg.assigned_sub}</code>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Select a resource to preview the required organizational approval hierarchy.
+              </p>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 };
+

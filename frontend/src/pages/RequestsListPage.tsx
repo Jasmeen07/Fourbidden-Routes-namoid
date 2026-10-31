@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AccessRequest, RequestStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { LimitsDiff } from '../components/LimitsDiff';
-import { Plus, Clock, CheckCircle2, XCircle, AlertCircle, Ban, ArrowRight, Shield, Flame } from 'lucide-react';
+import { Plus, Clock, CheckCircle2, XCircle, AlertCircle, Ban, ArrowRight, Shield } from 'lucide-react';
 
 export const RequestsListPage: React.FC = () => {
   const { apiFetch, user } = useAuth();
@@ -104,7 +104,6 @@ export const RequestsListPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {filtered.map((req) => {
             const isOpen = req.status === 'IN_REVIEW' || req.status === 'BLOCKED';
-            const priority = (req as any).priority;
 
             return (
               <div key={req.id} className="glass-panel" id={`request-card-${req.id}`} style={{ background: '#ffffff', border: '1px solid var(--border-subtle)' }}>
@@ -115,18 +114,12 @@ export const RequestsListPage: React.FC = () => {
                         {req.resource_name || req.resource_id}
                       </h3>
                       {getStatusBadge(req.status)}
-                      {priority && (
-                        <span className={`priority-badge priority-${priority.band?.toLowerCase()}`}>
-                          {priority.band === 'CRITICAL' && <Flame size={12} />}
-                          <span>{priority.band} (Score: {priority.score || priority.priority_score})</span>
-                        </span>
-                      )}
                       <span className="badge font-mono" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '0.7rem', border: '1px solid var(--border-subtle)' }}>
                         {req.id.slice(0, 8)}...
                       </span>
                     </div>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: '0.2rem 0' }}>
-                      <strong>Purpose:</strong> {req.purpose}
+                      <strong>Requester:</strong> <span className="font-mono">{req.requester_name || req.requester_id}</span> | <strong>Purpose:</strong> {req.purpose}
                     </p>
                     <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginTop: '0.2rem', margin: 0 }}>
                       <strong>Justification:</strong> {req.justification}

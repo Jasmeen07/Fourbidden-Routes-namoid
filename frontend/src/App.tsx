@@ -15,6 +15,8 @@ import { SimulatorPage } from './pages/SimulatorPage';
 import { AuditExplorerPage } from './pages/AuditExplorerPage';
 import { PolicyLinterPage } from './pages/PolicyLinterPage';
 import { RelationshipViewPage } from './pages/RelationshipViewPage';
+import { HierarchyPage } from './pages/HierarchyPage';
+import { ProvenancePage } from './pages/ProvenancePage';
 import { SignInPage } from './pages/SignInPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 
@@ -48,6 +50,8 @@ export const App: React.FC = () => {
                 <Route path="/requests" element={<RequestsListPage />} />
                 <Route path="/requests/new" element={<NewRequestPage />} />
                 <Route path="/reviews" element={<ReviewQueuePage />} />
+                <Route path="/hierarchy" element={<HierarchyPage />} />
+                <Route path="/provenance" element={<ProvenancePage />} />
                 <Route path="/relationships" element={<RelationshipViewPage />} />
                 <Route path="/grants" element={<GrantsPage />} />
                 <Route path="/simulator" element={<SimulatorPage />} />

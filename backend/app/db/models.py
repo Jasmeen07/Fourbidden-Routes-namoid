@@ -25,6 +25,11 @@ class User(Base):
     display_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=True)
     manager_sub = Column(String(128), ForeignKey("users.sub"), nullable=True)
+    is_agent = Column(Boolean, default=False, nullable=False)
+    owner_sub = Column(String(128), ForeignKey("users.sub"), nullable=True)
+    department = Column(String(64), default="General", nullable=False)
+    employee_id = Column(String(64), nullable=True)
+    delegated_permissions = Column(JSON, nullable=True)  # list of strings for AI agents
     active = Column(Boolean, default=True, nullable=False)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
@@ -46,6 +51,9 @@ class Resource(Base):
     name = Column(String(255), nullable=False)
     kind = Column(String(32), nullable=False)  # 'model' or 'dataset'
     tier = Column(String(64), nullable=False)  # 'PUBLIC_SYNTHETIC', 'INTERNAL_SYNTHETIC', 'RESTRICTED_SYNTHETIC'
+    department = Column(String(64), default="General", nullable=False)
+    sensitivity = Column(String(64), default="INTERNAL", nullable=False)  # 'CRITICAL', 'RESTRICTED', 'INTERNAL', 'PUBLIC'
+    is_crucial = Column(Boolean, default=False, nullable=False)
     owner_sub = Column(String(128), ForeignKey("users.sub"), nullable=False)
     allowed_actions = Column(JSON, nullable=False)  # list of dicts: {"name": ..., "risk_weight": ...}
     active = Column(Boolean, default=True, nullable=False)
@@ -187,3 +195,29 @@ class AIFinding(Base):
     summary_text = Column(Text, nullable=True)
     content_hash = Column(String(64), nullable=False)
     generated_at = Column(DateTime, nullable=False)
+
+
+class AgentEvent(Base):
+    __tablename__ = "agent_events"
+
+    id = Column(String(64), primary_key=True)
+    principal_id = Column(String(128), ForeignKey("users.sub"), nullable=False)
+    event_type = Column(String(64), nullable=False)  # 'message', 'tool_call', 'tool_result', 'external_send'
+    action = Column(String(64), nullable=True)  # 'read_file', 'external_send', etc.
+    resource_id = Column(String(64), nullable=True)
+    target_destination = Column(String(255), nullable=True)
+    label = Column(String(64), default="clean", nullable=False)  # 'untrusted_input', 'sensitive_input', 'clean'
+    payload = Column(JSON, nullable=True)
+    timestamp = Column(DateTime, nullable=False)
+
+
+class EventDependency(Base):
+    __tablename__ = "event_dependencies"
+
+    id = Column(String(64), primary_key=True)
+    event_id = Column(String(64), ForeignKey("agent_events.id"), nullable=False)
+    depends_on_id = Column(String(64), ForeignKey("agent_events.id"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "depends_on_id", name="uq_event_dep"),
+    )

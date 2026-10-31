@@ -12,6 +12,8 @@ import {
   Terminal,
   UserCheck,
   Lock,
+  Users,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -22,6 +24,8 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: Home, matchPaths: ['/', '/dashboard'] },
+    { label: 'Org Hierarchy & Agents', path: '/hierarchy', icon: Users, matchPaths: ['/hierarchy'] },
+    { label: 'Dependency & Guardrails', path: '/provenance', icon: Radio, matchPaths: ['/provenance'] },
     { label: 'Access Requests', path: '/requests', icon: FileText, matchPaths: ['/requests', '/requests/new'] },
     { label: 'Approvals', path: '/reviews', icon: CheckSquare, matchPaths: ['/reviews'] },
     { label: 'Datasets & Models', path: '/catalog', icon: Box, matchPaths: ['/catalog'] },

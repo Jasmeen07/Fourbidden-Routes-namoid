@@ -1,8 +1,63 @@
 resources:
+  # FORGE Project Resources (§2.1, §16.1)
+  - id: "finance.csv"
+    name: "Confidential Finance Dataset"
+    kind: "dataset"
+    tier: "RESTRICTED_SYNTHETIC"
+    department: "Finance"
+    sensitivity: "CRITICAL"
+    is_crucial: true
+    owner_sub: "E060"
+    active: true
+    allowed_actions:
+      - name: "read_sample"
+        risk_weight: 2
+      - name: "read_full"
+        risk_weight: 5
+      - name: "export_masked"
+        risk_weight: 7
+
+  - id: "engineering.csv"
+    name: "Engineering Project Artifacts"
+    kind: "dataset"
+    tier: "INTERNAL_SYNTHETIC"
+    department: "Engineering"
+    sensitivity: "INTERNAL"
+    is_crucial: false
+    owner_sub: "E050"
+    active: true
+    allowed_actions:
+      - name: "view_metadata"
+        risk_weight: 1
+      - name: "read_sample"
+        risk_weight: 1
+      - name: "read_full"
+        risk_weight: 3
+      - name: "query"
+        risk_weight: 2
+
+  - id: "network_logs.csv"
+    name: "Corporate Network Outbound Logs"
+    kind: "dataset"
+    tier: "INTERNAL_SYNTHETIC"
+    department: "Network"
+    sensitivity: "INTERNAL"
+    is_crucial: false
+    owner_sub: "E301"
+    active: true
+    allowed_actions:
+      - name: "read_sample"
+        risk_weight: 1
+      - name: "external_send"
+        risk_weight: 6
+
   - id: "M-sentiment-v1"
     name: "Customer Sentiment Model v1"
     kind: "model"
     tier: "INTERNAL_SYNTHETIC"
+    department: "Engineering"
+    sensitivity: "INTERNAL"
+    is_crucial: false
     owner_sub: "usr_owner_1"
     active: true
     allowed_actions:
@@ -17,6 +72,9 @@ resources:
     name: "Fraud Risk Scoring Engine v2"
     kind: "model"
     tier: "RESTRICTED_SYNTHETIC"
+    department: "Finance"
+    sensitivity: "RESTRICTED"
+    is_crucial: true
     owner_sub: "usr_owner_1"
     active: true
     allowed_actions:
@@ -31,6 +89,9 @@ resources:
     name: "Synthetic Customer Profiles Dataset"
     kind: "dataset"
     tier: "INTERNAL_SYNTHETIC"
+    department: "Finance"
+    sensitivity: "INTERNAL"
+    is_crucial: false
     owner_sub: "usr_owner_1"
     active: true
     allowed_actions:
@@ -45,6 +106,9 @@ resources:
     name: "Synthetic Insurance Claims Dataset"
     kind: "dataset"
     tier: "RESTRICTED_SYNTHETIC"
+    department: "Finance"
+    sensitivity: "CRITICAL"
+    is_crucial: true
     owner_sub: "usr_owner_1"
     active: true
     allowed_actions:
@@ -61,6 +125,9 @@ resources:
     name: "Public Evaluation Lexicon"
     kind: "dataset"
     tier: "PUBLIC_SYNTHETIC"
+    department: "General"
+    sensitivity: "PUBLIC"
+    is_crucial: false
     owner_sub: "usr_owner_1"
     active: true
     allowed_actions:

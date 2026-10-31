@@ -27,6 +27,8 @@ class SimulationGateway:
         caller_sub: str,
         input_data: Any = None,
         now: datetime | None = None,
+        target_destination: str | None = None,
+        event_id: str | None = None,
     ) -> dict[str, Any]:
         current_time = now or datetime.now(timezone.utc)
         if current_time.tzinfo is None:
@@ -87,6 +89,58 @@ class SimulationGateway:
 
         # 4. Pure PDP evaluation in strict order (§6.6)
         decision = evaluate_access(subject_ctx, grant_ctx, inv_ctx, current_time)
+
+        # 4b. AI Agent Delegation Check (FORGE §7.3)
+        if decision.allow and user and user.is_agent:
+            delegated = user.delegated_permissions or []
+            if action not in delegated:
+                from app.domain.pdp import CheckTrace
+                new_trace = list(decision.trace)
+                new_trace.append(CheckTrace(
+                    check_name="agent_delegation",
+                    status="fail",
+                    detail=f"Action '{action}' is not in delegated permissions for AI agent '{caller_sub}' (Accountable Owner: {user.owner_sub})"
+                ))
+                decision = Decision(allow=False, code="DENY_ACTION_NOT_DELEGATED", trace=new_trace)
+
+        # 4c. Network Guardrails & Exfiltration Check for Network Team & Agents (FORGE §3, §14)
+        if decision.allow and (action == "external_send" or target_destination is not None):
+            from app.domain.provenance import DEFAULT_APPROVED_DESTINATIONS, compute_taint_and_secrets, EventNode, EventEdge, ProvenanceGraph
+            from app.db.models import AgentEvent, EventDependency
+            from app.domain.pdp import CheckTrace
+
+            if target_destination and target_destination not in DEFAULT_APPROVED_DESTINATIONS:
+                new_trace = list(decision.trace)
+                new_trace.append(CheckTrace(
+                    check_name="network_destination_allowlist",
+                    status="fail",
+                    detail=f"Destination '{target_destination}' is not on the approved outbound allowlist: {list(DEFAULT_APPROVED_DESTINATIONS)}"
+                ))
+                decision = Decision(allow=False, code="DENY_NETWORK_DESTINATION_NOT_APPROVED", trace=new_trace)
+
+            if decision.allow and event_id:
+                db_events = db.execute(select(AgentEvent)).scalars().all()
+                db_deps = db.execute(select(EventDependency)).scalars().all()
+                nodes = {
+                    e.id: EventNode(
+                        id=e.id, principal_id=e.principal_id, event_type=e.event_type,
+                        action=e.action, resource_id=e.resource_id, target_destination=e.target_destination,
+                        label=e.label, timestamp=e.timestamp,
+                    )
+                    for e in db_events
+                }
+                edges = [EventEdge(source_id=d.depends_on_id, target_id=d.event_id) for d in db_deps]
+                graph = ProvenanceGraph(nodes=nodes, edges=tuple(edges))
+                prop_labels = compute_taint_and_secrets(graph)
+                node_labels = prop_labels.get(event_id, set())
+                if "tainted" in node_labels and "has_secret" in node_labels:
+                    new_trace = list(decision.trace)
+                    new_trace.append(CheckTrace(
+                        check_name="tainted_secret_exfiltration",
+                        status="fail",
+                        detail=f"Event '{event_id}' carries propagated untrusted taint and confidential secrets. External transmission blocked by FORGE PDP Datalog policy."
+                    ))
+                    decision = Decision(allow=False, code="DENY_TAINTED_EXFILTRATION", trace=new_trace)
 
         # 5. Record audit event inside transaction
         event_type = "ACCESS_ALLOWED" if decision.allow else "ACCESS_DENIED"

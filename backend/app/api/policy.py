@@ -1,11 +1,18 @@
-"""Policy discovery and assurance engineering endpoints (BLUEPRINT §6.4, §8, §14.3 Module 4)."""
+"""Policy discovery and FORGE hierarchy assurance endpoints (FORGE §7, §8)."""
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from app.db.engine import get_db
-from app.db.models import Resource, User, UserRole
+from app.db.models import Resource, User
 from app.auth.deps import get_current_user, UserContext
 from app.domain.policy import lint_policy
+from app.domain.hierarchy import (
+    Employee,
+    Agent,
+    determine_required_approval_steps,
+    is_crucial_resource,
+)
 
 router = APIRouter(prefix="/api/policy", tags=["policy"])
 
@@ -24,7 +31,7 @@ def get_effective_policy(request: Request):
 
 @router.get("/lint")
 def lint_policy_rules(request: Request):
-    """Innovation Module 4: Policy-as-Code Linter finds deadlocks and loopholes before runtime."""
+    """Assurance Engineering: Policy-as-Code consistency linter."""
     policy = request.app.state.policy
     findings = lint_policy(policy)
     return {
@@ -41,44 +48,73 @@ def what_if_simulation(
     db: Session = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
-    """Innovation Module 4: What-If simulation for reviewer routing and deadlock prevention."""
-    policy = request.app.state.policy
+    """FORGE Hierarchy Approval Routing Simulation (§7, §8)."""
     resource = db.get(Resource, payload.resource_id)
     requester = db.get(User, payload.requester_sub)
 
     if not resource or not requester:
         return {"error": "Resource or requester not found"}
 
+    all_users = db.execute(select(User)).scalars().all()
+    employees: dict[str, Employee] = {}
+    agents: dict[str, Agent] = {}
+
+    for u in all_users:
+        if u.is_agent:
+            agents[u.sub] = Agent(
+                id=u.sub,
+                name=u.display_name,
+                owner_id=u.owner_sub or "",
+                department=u.department or "General",
+                delegated_permissions=tuple(u.delegated_permissions or []),
+            )
+        else:
+            employees[u.sub] = Employee(
+                id=u.sub,
+                name=u.display_name,
+                role=u.roles[0].role if u.roles else "employee",
+                department=u.department or "General",
+                manager_id=u.manager_sub,
+                email=u.email,
+            )
+
     tier = resource.tier
-    required_slots = policy.approval_matrix.get(tier, [])
+    sens = getattr(resource, "sensitivity", "INTERNAL")
+    crucial = bool(getattr(resource, "is_crucial", False)) or is_crucial_resource(
+        payload.resource_id, tier=tier, sensitivity=sens
+    )
+    res_dept = getattr(resource, "department", "General")
+
+    steps = determine_required_approval_steps(
+        requester_id=payload.requester_sub,
+        resource_id=payload.resource_id,
+        resource_dept=res_dept,
+        resource_owner_id=resource.owner_sub,
+        is_crucial=crucial,
+        employees=employees,
+        agents=agents,
+        security_officer_id="R001",
+    )
 
     routing_preview = []
-    deadlock_detected = False
-
-    for role in required_slots:
-        assigned = None
-        if role == "manager":
-            assigned = requester.manager_sub
-        elif role == "resource_owner":
-            assigned = resource.owner_sub
-        elif role == "risk_reviewer":
-            assigned = "risk_reviewer_pool"
-
-        is_self = assigned == payload.requester_sub
-        if is_self:
-            deadlock_detected = True
-
+    for step in steps:
         routing_preview.append({
-            "slot_role": role,
-            "assigned_sub": assigned,
-            "is_self_conflict": is_self,
+            "slot_role": step.slot_role,
+            "assigned_sub": step.assigned_sub,
+            "level": step.level,
+            "title": step.title,
+            "is_crucial_escalation": step.is_crucial_escalation,
+            "is_self_conflict": step.assigned_sub == payload.requester_sub,
         })
 
     return {
         "resource_id": payload.resource_id,
+        "resource_name": resource.name,
         "requester_sub": payload.requester_sub,
+        "is_crucial": crucial,
+        "is_cross_dept": (requester.department or "").lower() != res_dept.lower(),
         "tier": tier,
         "routing": routing_preview,
-        "deadlock": deadlock_detected,
-        "note": "SoD prevents requester self-approval. Alternate reviewers required if conflict." if deadlock_detected else "Standard routing path clear."
+        "routing_mode": "MULTI_TIER_CRUCIAL_ESCALATION" if crucial or (requester.department or "").lower() != res_dept.lower() else "STANDARD_IMMEDIATE_SUPERIOR",
+        "datalog_rule": "Crucial/Cross-dept requires multi-level escalation to Executive (CTO/CFO), Resource Owner, and Security Officer (R001)" if (crucial or (requester.department or "").lower() != res_dept.lower()) else "Standard same-dept requests require only Immediate Superior approval",
     }

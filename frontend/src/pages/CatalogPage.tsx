@@ -22,7 +22,8 @@ export const CatalogPage: React.FC = () => {
           description: r.description || `Enterprise governed ${r.kind || 'resource'} under tier ${r.tier}`,
           max_duration_hours: r.max_duration_hours || (r.tier === 'RESTRICTED_SYNTHETIC' || r.tier === 'TIER_1_CRITICAL' ? 24 : 72),
           required_controls: r.required_controls || ['activity_logging', 'synthetic_data_only'],
-          risk_score: r.risk_score || (r.tier === 'RESTRICTED_SYNTHETIC' || r.tier === 'TIER_1_CRITICAL' ? 85 : r.tier === 'INTERNAL_SYNTHETIC' || r.tier === 'TIER_2_SENSITIVE' ? 55 : 20),
+          department: r.department || 'General',
+          is_crucial: !!r.is_crucial,
         }));
         setResources(normalized);
       } catch (err) {
@@ -120,9 +121,25 @@ export const CatalogPage: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Base Risk Score:</span>
-                    <span className="font-mono" style={{ fontWeight: 800, color: res.risk_score > 60 ? 'var(--accent-rose)' : res.risk_score > 30 ? 'var(--accent-amber)' : 'var(--accent-emerald)' }}>
-                      {res.risk_score} / 100
+                    <span style={{ color: 'var(--text-secondary)' }}>Department:</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {(res as any).department || 'General'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Governance:</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '4px',
+                        background: (res as any).is_crucial || res.tier === 'RESTRICTED_SYNTHETIC' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: (res as any).is_crucial || res.tier === 'RESTRICTED_SYNTHETIC' ? '#ef4444' : '#10b981',
+                      }}
+                    >
+                      {(res as any).is_crucial || res.tier === 'RESTRICTED_SYNTHETIC' ? 'Crucial Data (Escalated)' : 'Immediate Superior Route'}
                     </span>
                   </div>
 

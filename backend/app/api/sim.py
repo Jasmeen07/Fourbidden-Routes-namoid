@@ -26,6 +26,9 @@ class SimInvokePayload(BaseModel):
     grant_id: str | None = None
     resource_id: str | None = None
     client_ip: str | None = None
+    caller_sub: str | None = None
+    target_destination: str | None = None
+    event_id: str | None = None
     payload: Any = None
     input: Any = None
 
@@ -74,15 +77,18 @@ def invoke_simulator(
     if not resource_id:
         raise HTTPException(status_code=400, detail="Target resource_id could not be resolved from payload or grant.")
 
+    effective_caller = payload.caller_sub or user.sub
     input_data = payload.payload if payload.payload is not None else payload.input
     result = SimulationGateway.invoke(
         db=db,
         resource_id=resource_id,
         action=payload.action,
         declared_purpose=payload.declared_purpose,
-        caller_sub=user.sub,
+        caller_sub=effective_caller,
         input_data=input_data,
         now=now,
+        target_destination=payload.target_destination,
+        event_id=payload.event_id,
     )
     db.commit()
 

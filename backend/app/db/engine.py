@@ -103,7 +103,7 @@ def init_database(custom_engine=None) -> None:
 
     if str(target_engine.url).startswith("sqlite"):
         with target_engine.connect() as conn:
-            # Safe migration for grants utilization columns (Innovation 5)
+            # Safe migration for grants utilization columns
             try:
                 conn.exec_driver_sql("ALTER TABLE grants ADD COLUMN last_used_at DATETIME;")
             except Exception:
@@ -112,6 +112,21 @@ def init_database(custom_engine=None) -> None:
                 conn.exec_driver_sql("ALTER TABLE grants ADD COLUMN invocation_count INTEGER DEFAULT 0 NOT NULL;")
             except Exception:
                 pass
+            # Safe migrations for hierarchy and agent columns
+            for col_sql in [
+                "ALTER TABLE users ADD COLUMN is_agent BOOLEAN DEFAULT 0 NOT NULL;",
+                "ALTER TABLE users ADD COLUMN owner_sub VARCHAR(128);",
+                "ALTER TABLE users ADD COLUMN department VARCHAR(64) DEFAULT 'General' NOT NULL;",
+                "ALTER TABLE users ADD COLUMN employee_id VARCHAR(64);",
+                "ALTER TABLE users ADD COLUMN delegated_permissions JSON;",
+                "ALTER TABLE resources ADD COLUMN department VARCHAR(64) DEFAULT 'General' NOT NULL;",
+                "ALTER TABLE resources ADD COLUMN sensitivity VARCHAR(64) DEFAULT 'INTERNAL' NOT NULL;",
+                "ALTER TABLE resources ADD COLUMN is_crucial BOOLEAN DEFAULT 0 NOT NULL;",
+            ]:
+                try:
+                    conn.exec_driver_sql(col_sql)
+                except Exception:
+                    pass
 
             for ddl in TRIGGERS_DDL:
                 conn.exec_driver_sql(ddl)

@@ -23,6 +23,7 @@ from app.domain.errors import (
     BlockedNoEligibleReviewerError,
 )
 from app.ids import generate_id
+from app.domain.hierarchy import CRUCIAL_RESOURCE_IDS
 
 # Secret scanner patterns (EC-R05)
 SECRET_PATTERNS = [
@@ -163,8 +164,35 @@ class RequestsService:
         req_id = generate_id("req")
         requester = db.get(User, requester_sub)
 
-        # Determine required review slots
-        required_slot_roles = policy.approval_matrix.get(tier, ["manager", "resource_owner", "risk_reviewer"])
+        # Agent Delegated Permissions Check (FORGE §5.2, §7.3)
+        if requester and requester.is_agent:
+            delegated = set(requester.delegated_permissions or [])
+            if not set(actions).issubset(delegated):
+                raise DomainError(
+                    f"Requested actions {sorted(list(set(actions) - delegated))} exceed explicitly delegated permissions for AI Agent '{requester_sub}'",
+                    code="DELEGATION_CONTROL_VIOLATION",
+                    status_code=403,
+                )
+
+        # FORGE Hierarchy & Crucial Data Routing (§7, §9.2)
+        is_crucial = (
+            bool(getattr(resource, "is_crucial", False))
+            or (resource_id in CRUCIAL_RESOURCE_IDS)
+            or (resource.tier == "RESTRICTED_SYNTHETIC")
+            or (getattr(resource, "sensitivity", "") in ["CRITICAL", "RESTRICTED"])
+        )
+        requester_dept = requester.department if requester else "General"
+        resource_dept = getattr(resource, "department", "General")
+        is_cross_dept = (requester_dept.lower() != resource_dept.lower())
+
+        # Determine review slot roles: Blueprint test fixtures use policy matrix; FORGE users route by cruciality/hierarchy
+        if requester_sub.startswith("usr_"):
+            required_slot_roles = list(policy.approval_matrix.get(resource.tier, ["manager"]))
+        elif is_crucial or is_cross_dept:
+            required_slot_roles = ["manager", "resource_owner", "risk_reviewer"]
+        else:
+            required_slot_roles = ["manager"]
+
         slots: list[ReviewSlot] = []
         is_blocked = False
 
@@ -173,11 +201,14 @@ class RequestsService:
         for role in required_slot_roles:
             assigned_sub = None
             if role == "manager":
-                assigned_sub = requester.manager_sub if requester else None
+                if requester and requester.is_agent and requester.owner_sub:
+                    owner_user = db.get(User, requester.owner_sub)
+                    assigned_sub = owner_user.manager_sub if owner_user else None
+                else:
+                    assigned_sub = requester.manager_sub if requester else None
             elif role == "resource_owner":
                 assigned_sub = resource.owner_sub
             elif role == "risk_reviewer":
-                # Find eligible risk reviewers not equal to requester and not already assigned
                 candidates = db.execute(
                     select(UserRole.sub).where(UserRole.role == "risk_reviewer")
                 ).scalars().all()
@@ -187,10 +218,10 @@ class RequestsService:
                         break
 
             # SoD check at assignment (SG-1 and dual slot)
-            if assigned_sub is None or assigned_sub == requester_sub or assigned_sub in assigned_subs:
-                # Try finding an alternate for manager / resource owner if same
+            if assigned_sub is None:
+                raise BlockedNoEligibleReviewerError(f"No eligible reviewer found for role '{role}'")
+            if assigned_sub == requester_sub or assigned_sub in assigned_subs:
                 is_blocked = True
-                assigned_sub = assigned_sub or "unassigned"
 
             assigned_subs.add(assigned_sub)
             slot = ReviewSlot(

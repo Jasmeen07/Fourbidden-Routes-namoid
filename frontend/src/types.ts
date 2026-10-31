@@ -1,4 +1,4 @@
-export type ResourceTier = 'TIER_1_CRITICAL' | 'TIER_2_SENSITIVE' | 'TIER_3_STANDARD';
+export type ResourceTier = 'TIER_1_CRITICAL' | 'TIER_2_SENSITIVE' | 'TIER_3_STANDARD' | 'RESTRICTED_SYNTHETIC' | 'INTERNAL_SYNTHETIC' | 'PUBLIC_SYNTHETIC';
 export type ResourceType = 'MODEL' | 'DATASET' | 'TOOL';
 
 export interface ResourceLimits {
@@ -19,7 +19,10 @@ export interface Resource {
   allowed_actions: string[];
   max_duration_hours: number;
   required_controls: string[];
-  risk_score: number;
+  risk_score?: number;
+  department?: string;
+  sensitivity?: string;
+  is_crucial?: boolean;
   is_active: boolean;
 }
 
@@ -98,25 +101,80 @@ export interface DecisionLineageItem {
   decided_at?: string;
 }
 
-export interface RequestPriority {
-  score: number;
-  band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  waiting_hours: number;
-  sla_hours_remaining: number;
-  is_starved: boolean;
-  reasons: string[];
-}
 
 export interface ApprovalAssistanceData {
   request_id: string;
   resource_name: string;
   resource_tier: string;
-  risk_score: number;
-  risk_band: string;
-  priority?: RequestPriority;
+  resource_sensitivity?: string;
+  is_crucial?: boolean;
+  is_cross_dept?: boolean;
+  requester?: {
+    sub: string;
+    department: string;
+    is_agent: boolean;
+    owner_sub?: string | null;
+  };
   guidance: Record<string, RoleGuidance>;
   lineage: DecisionLineageItem[];
-  suggestions: Array<{ action?: string; description?: string; target_field?: string; suggested_value?: any }>;
+}
+
+export interface Principal {
+  id: string;
+  name: string;
+  role: string;
+  department: string;
+  manager_id?: string | null;
+  email?: string | null;
+  is_agent: boolean;
+  owner_id?: string | null;
+  delegated_permissions?: string[];
+  owned_agents?: Array<{
+    id: string;
+    name: string;
+    department: string;
+    delegated_permissions: string[];
+    owner_id: string;
+  }>;
+}
+
+export interface ApprovalPreviewStep {
+  slot_role: string;
+  assigned_sub: string;
+  level: number;
+  title: string;
+  is_crucial_escalation: boolean;
+}
+
+export interface ApprovalPreviewResponse {
+  requester_id: string;
+  requester_name: string;
+  resource_id: string;
+  resource_name: string;
+  is_crucial: boolean;
+  is_cross_dept: boolean;
+  steps: ApprovalPreviewStep[];
+}
+
+export interface ProvenanceEventNode {
+  id: string;
+  principal_id: string;
+  event_type: 'message' | 'tool_call' | 'tool_result' | 'external_send';
+  action?: string | null;
+  resource_id?: string | null;
+  target_destination?: string | null;
+  label: 'clean' | 'untrusted_input' | 'sensitive_input';
+  payload?: any;
+  timestamp: string;
+  propagated_labels?: string[];
+  is_tainted?: boolean;
+  has_secret?: boolean;
+}
+
+export interface ProvenanceEventEdge {
+  id: string;
+  source_id: string;
+  target_id: string;
 }
 
 export interface AuditEvent {
@@ -131,27 +189,6 @@ export interface AuditEvent {
   hash: string;
 }
 
-export interface RiskFactor {
-  factor: string;
-  weight: number;
-  description: string;
-}
-
-export interface CounterfactualRecommendation {
-  dimension: string;
-  current_value: any;
-  suggested_value: any;
-  potential_risk_reduction: number;
-  reason: string;
-}
-
-export interface RiskLensEvaluation {
-  risk_score: number;
-  risk_tier: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  rationale: string;
-  factors: RiskFactor[];
-  counterfactuals: CounterfactualRecommendation[];
-}
 
 export interface TraceStep {
   check: string;
