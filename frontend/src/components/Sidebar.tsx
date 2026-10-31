@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   History,
   Terminal,
-  UserCheck
+  UserCheck,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,6 +30,7 @@ export const Sidebar: React.FC = () => {
     { label: 'Risk & Compliance', path: '/policy', icon: ShieldCheck, matchPaths: ['/policy'] },
     { label: 'Audit Logs', path: '/audit', icon: History, matchPaths: ['/audit'] },
     { label: 'PEP Simulator', path: '/simulator', icon: Terminal, matchPaths: ['/simulator'] },
+    { label: 'NamoID Auth', path: '/login', icon: Lock, matchPaths: ['/login'] },
   ];
 
   return (

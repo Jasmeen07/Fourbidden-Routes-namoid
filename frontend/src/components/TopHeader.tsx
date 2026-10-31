@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Search, Bell, ChevronDown, CheckCircle, ShieldAlert, ArrowRight, User } from 'lucide-react';
+import { Search, Bell, ChevronDown, CheckCircle, ShieldAlert, ArrowRight, User, Shield, Lock, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SpiderWebDecor } from './SpiderWebDecor';
 import { QuickSearchModal } from './QuickSearchModal';
 import { useNavigate } from 'react-router-dom';
 
 export const TopHeader: React.FC = () => {
-  const { user, activePersonaId, personas, switchPersona } = useAuth();
+  const { user, activePersonaId, personas, switchPersona, isNamoIDAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -63,6 +63,31 @@ export const TopHeader: React.FC = () => {
 
         {/* Right Header: Notification, User Profile, Spider Web */}
         <div className="top-header-right">
+          {/* NamoID Auth Pill */}
+          <button
+            className="namoid-header-pill"
+            onClick={() => navigate('/login')}
+            title={isNamoIDAuthenticated ? `NamoID Verified: ${user?.sub}` : 'Sign in with NamoID Hosted Auth'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '9999px',
+              fontSize: '0.785rem',
+              fontWeight: 650,
+              background: isNamoIDAuthenticated ? '#ecfdf5' : '#fef3c7',
+              color: isNamoIDAuthenticated ? '#047857' : '#b45309',
+              border: `1px solid ${isNamoIDAuthenticated ? '#a7f3d0' : '#fde68a'}`,
+              cursor: 'pointer',
+              transition: 'all 150ms ease',
+            }}
+            id="top-header-namoid-btn"
+          >
+            <Shield size={13} color={isNamoIDAuthenticated ? '#10b981' : '#c2410c'} />
+            <span>{isNamoIDAuthenticated ? (user?.display_name || user?.sub) : 'NamoID Sign In'}</span>
+          </button>
+
           {/* Notifications Bell */}
           <div className="notif-wrapper">
             <button
@@ -189,6 +214,30 @@ export const TopHeader: React.FC = () => {
                       </button>
                     );
                   })}
+                </div>
+                <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {isNamoIDAuthenticated ? 'NamoID Connected' : 'NamoID Hosted Auth'}
+                  </span>
+                  {isNamoIDAuthenticated ? (
+                    <button
+                      onClick={() => { logout(); setIsUserMenuOpen(false); }}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                    >
+                      <LogOut size={12} />
+                      <span>Sign Out</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { navigate('/login'); setIsUserMenuOpen(false); }}
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                    >
+                      <Lock size={12} />
+                      <span>Sign In</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
