@@ -62,6 +62,14 @@ async def callback(
     # Constant-time state check + single-use transaction load & delete (EC-A02, EC-A04)
     tx = db.get(AuthTransaction, state)
     if not tx:
+        # If this is a browser redirect from the NamoID Hosted Auth flow, forward to frontend SPA
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return RedirectResponse(
+                url=f"http://localhost:5173/auth/callback?{request.url.query}",
+                status_code=302,
+            )
+
         AuditService.append_event(
             session=db,
             event_type="AUTH_FAILURE",
