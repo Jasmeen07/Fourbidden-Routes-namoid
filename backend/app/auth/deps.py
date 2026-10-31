@@ -27,12 +27,15 @@ def get_current_user(
     Authenticates subject and re-reads roles from DB on EVERY request (EC-A08).
     Returns 401 if unauthenticated or session expired.
     """
-    # 1. Cookie or Authorization header (for test scripts)
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+    # 1. Bearer Authorization header takes precedence (explicit client token)
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):].strip()
+
+    # 2. Fall back to Session Cookie
     if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[len("Bearer "):].strip()
+        token = request.cookies.get(SESSION_COOKIE_NAME)
 
     if not token:
         raise HTTPException(
@@ -41,7 +44,8 @@ def get_current_user(
         )
 
     # Allow injected clock for testing/demo
-    clock = getattr(request.app.state, "clock", None)
+    app = request.scope.get("app")
+    clock = getattr(app.state, "clock", None) if app and hasattr(app, "state") else None
     now = clock.now() if clock else None
 
     session_row = SessionManager.validate_session(db, token, now=now)
@@ -81,7 +85,7 @@ def verify_csrf(
 ) -> None:
     """
     Enforces CSRF protection on mutating requests (POST, PUT, PATCH, DELETE)
-    via X-CSRF-Token header bound to the session.
+    via X-CSRF-Token header bound to the session (BLUEPRINT §7.2).
     """
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         # Exempt auth endpoints (login callback)
@@ -89,8 +93,16 @@ def verify_csrf(
             return
 
         client_token = request.headers.get("X-CSRF-Token")
-        if not client_token or client_token != user.csrf_token:
-            raise HTTPException(
-                status_code=403,
-                detail={"code": "CSRF_TOKEN_INVALID", "message": "Missing or invalid X-CSRF-Token header"},
-            )
+        if client_token and client_token == user.csrf_token:
+            return
+
+        # If authenticated via explicit Bearer token header,
+        # ambient browser CSRF is not applicable (CORS protects custom headers).
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return
+
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CSRF_TOKEN_INVALID", "message": "Missing or invalid X-CSRF-Token header"},
+        )

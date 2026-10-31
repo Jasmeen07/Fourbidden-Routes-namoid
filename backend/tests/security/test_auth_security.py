@@ -203,3 +203,82 @@ def test_ec_a10_unverified_email_no_seed_bootstrap(auth_db):
     )
     roles = RoleResolver.resolve_roles(auth_db, identity_unverified)
     assert roles == []
+
+
+@pytest.mark.ec("EC-A11")
+def test_ec_a11_csrf_protection_and_bearer_precedence(auth_db):
+    """CSRF validation enforces token check on cookie sessions and prioritizes Bearer auth (EC-A11)."""
+    from fastapi import Request, HTTPException
+    from app.auth.deps import get_current_user, verify_csrf
+    from app.auth.session import SESSION_COOKIE_NAME
+
+    now = datetime.now(timezone.utc)
+    user = User(sub="usr_alice", display_name="Alice", active=True)
+    auth_db.add(user)
+    auth_db.commit()
+
+    token1, csrf1, _ = SessionManager.create_session(auth_db, "usr_alice", now=now)
+    token2, csrf2, _ = SessionManager.create_session(auth_db, "usr_alice", now=now)
+    auth_db.commit()
+
+    # 1. Bearer token in Authorization header takes precedence over cookie
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/requests",
+        "headers": [
+            (b"authorization", f"Bearer {token2}".encode("latin-1")),
+            (b"cookie", f"{SESSION_COOKIE_NAME}={token1}".encode("latin-1")),
+        ],
+    }
+    req = Request(scope)
+    ctx = get_current_user(req, db=auth_db)
+    assert ctx.csrf_token == csrf2  # Bound to token2, not stale cookie token1!
+
+    # 2. Bearer authentication passes verify_csrf
+    verify_csrf(req, user=ctx)
+
+    # 3. Cookie-only authentication with matching X-CSRF-Token passes
+    scope_cookie_valid = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/requests",
+        "headers": [
+            (b"cookie", f"{SESSION_COOKIE_NAME}={token1}".encode("latin-1")),
+            (b"x-csrf-token", csrf1.encode("latin-1")),
+        ],
+    }
+    req_cookie_valid = Request(scope_cookie_valid)
+    ctx1 = get_current_user(req_cookie_valid, db=auth_db)
+    verify_csrf(req_cookie_valid, user=ctx1)
+
+    # 4. Cookie-only authentication with missing X-CSRF-Token fails with CSRF_TOKEN_INVALID
+    scope_cookie_missing = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/requests",
+        "headers": [
+            (b"cookie", f"{SESSION_COOKIE_NAME}={token1}".encode("latin-1")),
+        ],
+    }
+    req_cookie_missing = Request(scope_cookie_missing)
+    with pytest.raises(HTTPException) as exc_info:
+        verify_csrf(req_cookie_missing, user=ctx1)
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "CSRF_TOKEN_INVALID"
+
+    # 5. Cookie-only authentication with wrong X-CSRF-Token fails with CSRF_TOKEN_INVALID
+    scope_cookie_wrong = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/requests",
+        "headers": [
+            (b"cookie", f"{SESSION_COOKIE_NAME}={token1}".encode("latin-1")),
+            (b"x-csrf-token", b"attacker_forged_csrf_token"),
+        ],
+    }
+    req_cookie_wrong = Request(scope_cookie_wrong)
+    with pytest.raises(HTTPException) as exc_info:
+        verify_csrf(req_cookie_wrong, user=ctx1)
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "CSRF_TOKEN_INVALID"

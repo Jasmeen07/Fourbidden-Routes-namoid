@@ -183,21 +183,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('gg_token');
     localStorage.removeItem('gg_csrf');
 
-    // Initialize initial session in memory
-    switchPersona(activePersonaId);
+    const bootstrapAuth = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Check if backend already has an active session cookie (e.g. from NamoID login or prior session)
+        const meRes = await fetch('/api/me');
+        if (meRes.ok) {
+          const data = await meRes.json();
+          setUser({
+            sub: data.sub,
+            display_name: data.display_name,
+            email: data.email,
+            roles: data.roles || [],
+            active: data.active,
+          });
+          setCsrfToken(data.csrf_token);
+          // If the sub corresponds to a persona, align activePersonaId
+          const matchingPersona = PERSONAS.find((p) => p.id === data.sub);
+          if (matchingPersona) {
+            setActivePersonaId(matchingPersona.id);
+            localStorage.setItem('gg_persona', matchingPersona.id);
+          }
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // Fall back to persona switch
+      }
+
+      // 2. If no active cookie session exists, initialize default demo persona
+      await switchPersona(activePersonaId);
+    };
+
+    bootstrapAuth();
   }, []);
 
   const apiFetch = async (path: string, options: RequestInit = {}) => {
+    let currentToken = token;
+    let currentCsrf = csrfToken;
+
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase() || 'GET');
+
+    // If this is a mutation and we don't have csrfToken in state yet, fetch /api/me to retrieve session's csrf_token
+    if (isMutation && !currentCsrf) {
+      try {
+        const meRes = await fetch('/api/me', {
+          headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.csrf_token) {
+            currentCsrf = meData.csrf_token;
+            setCsrfToken(currentCsrf);
+          }
+        }
+      } catch {
+        // Continue
+      }
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
     }
-    if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase() || 'GET')) {
-      headers['X-CSRF-Token'] = csrfToken;
+    if (currentCsrf && isMutation) {
+      headers['X-CSRF-Token'] = currentCsrf;
     }
 
     const res = await fetch(path, {
@@ -221,7 +275,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prob = { code: `HTTP_${res.status}`, message: String(errBody) };
       }
 
-      const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase() || 'GET');
+      // If failed with CSRF_TOKEN_INVALID, attempt a one-time fresh token sync from /api/me and retry
+      if (isMutation && (prob.code === 'CSRF_TOKEN_INVALID' || prob.message?.includes('X-CSRF-Token'))) {
+        try {
+          const meRes = await fetch('/api/me', {
+            headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData.csrf_token && meData.csrf_token !== currentCsrf) {
+              setCsrfToken(meData.csrf_token);
+              headers['X-CSRF-Token'] = meData.csrf_token;
+              const retryRes = await fetch(path, { ...options, headers });
+              if (retryRes.ok) {
+                const retryJson = retryRes.headers.get('content-type')?.includes('json');
+                return retryJson ? await retryRes.json() : null;
+              }
+            }
+          }
+        } catch {
+          // Fall through to error handler
+        }
+      }
+
       if (isMutation || [403, 409, 422].includes(res.status)) {
         setProblem(prob);
       }
