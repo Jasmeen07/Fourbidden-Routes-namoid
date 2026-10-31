@@ -14,6 +14,12 @@ export default defineConfig({
       '/auth': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass: (req) => {
+          // Serve SPA index.html for client-side callback route
+          if (req.url && req.url.startsWith('/auth/callback')) {
+            return '/index.html';
+          }
+        },
       },
     },
   },

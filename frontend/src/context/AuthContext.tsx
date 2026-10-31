@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { CompletedHostedAuth } from '@namoidhq/react';
 
 export interface UserInfo {
   sub: string;
@@ -41,12 +42,16 @@ interface AuthContextType {
   user: UserInfo | null;
   token: string | null;
   csrfToken: string | null;
+  namoIDAuth: CompletedHostedAuth | null;
+  isNamoIDAuthenticated: boolean;
   isLoading: boolean;
   activePersonaId: string;
   personas: Persona[];
   problem: ProblemDetail | null;
   clearProblem: () => void;
   switchPersona: (personaId: string) => Promise<void>;
+  setNamoIDAuth: (auth: CompletedHostedAuth) => Promise<void>;
+  logout: () => Promise<void>;
   apiFetch: (path: string, options?: RequestInit) => Promise<any>;
 }
 
@@ -54,9 +59,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserInfo | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('gg_token'));
-  const [csrfToken, setCsrfToken] = useState<string | null>(localStorage.getItem('gg_csrf'));
-  const [activePersonaId, setActivePersonaId] = useState<string>(localStorage.getItem('gg_persona') || 'priya');
+  // In-memory token management: Tokens are strictly held in React state memory, NEVER in localStorage
+  const [token, setToken] = useState<string | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [namoIDAuth, setNamoIDAuthState] = useState<CompletedHostedAuth | null>(null);
+  const [activePersonaId, setActivePersonaId] = useState<string>(
+    localStorage.getItem('gg_persona') || 'priya'
+  );
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
 
@@ -77,13 +86,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCsrfToken(data.csrf_token);
         setUser(data.user);
         setActivePersonaId(personaId);
-        localStorage.setItem('gg_token', data.token);
-        localStorage.setItem('gg_csrf', data.csrf_token);
+        setNamoIDAuthState(null);
         localStorage.setItem('gg_persona', personaId);
         setIsLoading(false);
         return;
       }
-    } catch (err) {
+    } catch {
       // Backend not running, use standalone mock mode
     }
 
@@ -98,11 +106,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActivePersonaId(personaId);
     setToken(`mock-token-${personaId}`);
     setCsrfToken('mock-csrf');
+    setNamoIDAuthState(null);
     localStorage.setItem('gg_persona', personaId);
     setIsLoading(false);
   };
 
+  const setNamoIDAuth = async (auth: CompletedHostedAuth) => {
+    setIsLoading(true);
+    try {
+      // Keep OIDC tokens strictly in React memory
+      setNamoIDAuthState(auth);
+      setToken(auth.tokens.access_token);
+
+      const sub = auth.identity.sub || auth.idTokenClaims.sub;
+      const displayName = auth.identity.name || auth.identity.email || sub;
+      const email = auth.identity.email;
+
+      // Sync with backend session in memory
+      try {
+        const res = await fetch('/auth/dev-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: sub,
+            display_name: displayName,
+            email: email,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setToken(data.token);
+          setCsrfToken(data.csrf_token);
+          setUser(data.user);
+        } else {
+          setUser({
+            sub,
+            display_name: displayName,
+            email,
+            roles: ['requester', 'ML_ENGINEER'],
+            active: true,
+          });
+        }
+      } catch {
+        setUser({
+          sub,
+          display_name: displayName,
+          email,
+          roles: ['requester', 'ML_ENGINEER'],
+          active: true,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await fetch('/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors on logout
+    }
+    // Wipe all tokens and session state from memory
+    setToken(null);
+    setCsrfToken(null);
+    setUser(null);
+    setNamoIDAuthState(null);
+    // Defense-in-depth: Ensure localStorage has no tokens
+    localStorage.removeItem('gg_token');
+    localStorage.removeItem('gg_csrf');
+  };
+
   useEffect(() => {
+    // Defense-in-depth: scrub any stale legacy tokens from localStorage
+    localStorage.removeItem('gg_token');
+    localStorage.removeItem('gg_csrf');
+
+    // Initialize initial session in memory
     switchPersona(activePersonaId);
   }, []);
 
@@ -157,12 +238,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         csrfToken,
+        namoIDAuth,
+        isNamoIDAuthenticated: Boolean(namoIDAuth),
         isLoading,
         activePersonaId,
         personas: PERSONAS,
         problem,
         clearProblem,
         switchPersona,
+        setNamoIDAuth,
+        logout,
         apiFetch,
       }}
     >

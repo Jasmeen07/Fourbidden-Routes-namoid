@@ -15,6 +15,8 @@ import { SimulatorPage } from './pages/SimulatorPage';
 import { AuditExplorerPage } from './pages/AuditExplorerPage';
 import { PolicyLinterPage } from './pages/PolicyLinterPage';
 import { RelationshipViewPage } from './pages/RelationshipViewPage';
+import { SignInPage } from './pages/SignInPage';
+import { AuthCallbackPage } from './pages/AuthCallbackPage';
 
 export const App: React.FC = () => {
   return (
@@ -40,6 +42,8 @@ export const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/login" element={<SignInPage />} />
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
                 <Route path="/requests" element={<RequestsListPage />} />
                 <Route path="/requests/new" element={<NewRequestPage />} />
