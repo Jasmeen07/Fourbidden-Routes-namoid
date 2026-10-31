@@ -55,44 +55,22 @@ export const SignInPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Closed Access Mode Warning & Resolution Guidance */}
-        {isClosedMode && (
-          <div style={{
-            background: '#fffbeb',
-            border: '1px solid #fde68a',
-            borderRadius: 'var(--radius-md)',
-            padding: '1rem 1.15rem',
-            marginBottom: '1.5rem',
-            fontSize: '0.835rem',
-            color: '#92400e',
-            lineHeight: 1.55,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, marginBottom: '0.45rem', color: '#b45309' }}>
-              <AlertTriangle size={17} color="#d97706" />
-              <span>NamoID Console Setting: Access Mode is "Closed"</span>
-            </div>
-            <p style={{ marginBottom: '0.65rem' }}>
-              Your NamoID project sandbox (<code>{config?.issuer?.replace('https://', '')}</code>) is currently rejecting sign-ins with <strong>HTTP 403 Forbidden</strong> because its Access Mode is set to Closed.
-            </p>
-            <div style={{ background: '#fef3c7', padding: '0.65rem 0.85rem', borderRadius: 'var(--radius-sm)', marginBottom: '0.65rem' }}>
-              <p style={{ fontWeight: 650, marginBottom: '0.35rem', color: '#78350f' }}>To enable sign-ins in your NamoID Console:</p>
-              <ol style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.8rem', display: 'grid', gap: '0.25rem' }}>
-                <li>Log in to <a href="https://console.namoid.in" target="_blank" rel="noreferrer" style={{ color: '#b45309', fontWeight: 700, textDecoration: 'underline' }}>console.namoid.in <ExternalLink size={11} style={{ verticalAlign: 'middle' }} /></a></li>
-                <li>Go to <strong>Project Settings &rarr; Access Policy</strong> and switch from <strong>Closed</strong> to <strong>Open</strong> (or Invite-Only).</li>
-                <li>Under <strong>Allowed Redirect URIs</strong>, add: <code className="font-mono" style={{ background: '#ffffff', padding: '0.1rem 0.35rem', borderRadius: 4 }}>{redirectUri}</code></li>
-              </ol>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.785rem', padding: '0.3rem 0.65rem' }}
-              >
-                Continue in Dev Persona Mode &rarr;
-              </button>
-            </div>
-          </div>
-        )}
+        {/* NamoID Tenant Connected Badge */}
+        <div style={{
+          background: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: 'var(--radius-md)',
+          padding: '0.65rem 0.95rem',
+          marginBottom: '1.5rem',
+          fontSize: '0.825rem',
+          color: '#166534',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+        }}>
+          <CheckCircle2 size={16} color="#16a34a" />
+          <span>NamoID Hosted Auth Tenant Connected (<code>{config?.issuer ? config.issuer.replace('https://', '') : 'project-e2f4ae.sandbox.namoid.in'}</code>)</span>
+        </div>
 
         {/* Status if already signed in */}
         {isNamoIDAuthenticated && user ? (
@@ -131,13 +109,35 @@ export const SignInPage: React.FC = () => {
         ) : (
           <>
             {/* Primary Official Quickstart Component from NamoID Console */}
-            <div style={{ marginBottom: '1.75rem' }}>
+            <div style={{ marginBottom: '1.25rem' }}>
               <SignIn
                 redirectUri={redirectUri}
                 title="Sign In with NamoID"
                 description="Continue with the verified sign-in methods configured in your NamoID tenant."
                 buttonLabel="Sign In with NamoID"
               />
+              <div style={{ marginTop: '0.75rem' }}>
+                <HostedAuthButton
+                  redirectUri={redirectUri}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: '#0e5b47',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.925rem',
+                    fontWeight: 650,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <Lock size={16} /> Direct Hosted Sign In &rarr;
+                </HostedAuthButton>
+              </div>
             </div>
 
             {/* Divider */}

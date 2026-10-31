@@ -23,6 +23,18 @@ export default defineConfig({
           }
         },
       },
+      '/namoid-api': {
+        target: 'https://api.namoid.in',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/namoid-api/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('referer');
+            proxyReq.removeHeader('origin');
+          });
+        },
+      },
     },
   },
 })
