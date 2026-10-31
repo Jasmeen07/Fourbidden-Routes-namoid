@@ -66,7 +66,7 @@ async def callback(
         accept = request.headers.get("accept", "")
         if "text/html" in accept:
             return RedirectResponse(
-                url=f"http://localhost:5173/auth/callback?{request.url.query}",
+                url=f"http://localhost:3000/auth/callback?{request.url.query}",
                 status_code=302,
             )
 
