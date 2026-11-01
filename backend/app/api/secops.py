@@ -615,7 +615,7 @@ def test_servicenow_dispatch(
     db.commit()
 
     return {
-        "message": "ServiceNow SIR incident auto-opened and dispatched",
+        "message": "Enterprise SIR incident auto-opened and dispatched",
         "incident_id": incident.id,
         "servicenow_number": incident.servicenow_number,
         "servicenow_sys_id": incident.servicenow_sys_id,

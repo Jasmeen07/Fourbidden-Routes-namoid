@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "claude-3-7-sonnet-latest"
 
     SERVICENOW_ENABLED: bool = True
-    SERVICENOW_INSTANCE_URL: str = "https://dev-secops.service-now.com"
+    SERVICENOW_INSTANCE_URL: str = "https://dev-secops.enterprise-sir.internal"
     SERVICENOW_WEBHOOK_URL: str = ""
     SERVICENOW_TABLE: str = "sn_si_incident"
     SERVICENOW_MOCK_MODE: bool = True

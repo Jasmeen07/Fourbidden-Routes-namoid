@@ -111,10 +111,10 @@ class ServiceNowService:
                 {
                     "note_id": generate_id("note"),
                     "timestamp": current_time.isoformat(),
-                    "author": "ServiceNow SIR Integration Adapter",
+                    "author": "Enterprise SIR Integration Adapter",
                     "text": (
                         f"Automated incident opened from Policy Decision Point (PDP) breach.\n"
-                        f"External ServiceNow Reference: {servicenow_number} (sys_id: {servicenow_sys_id}).\n"
+                        f"External Incident Reference: {servicenow_number} (sys_id: {servicenow_sys_id}).\n"
                         f"Webhook Delivery Status: {webhook_status}.\n"
                         f"Category: {sir_payload['category']} &bull; Priority: {prio_label}."
                     ),
@@ -232,11 +232,11 @@ class ServiceNowService:
             incident.resolved_at = current_time
 
         notes_list = list(incident.investigation_notes or [])
-        note_text = work_notes or f"ServiceNow state updated to {mapped_status}."
+        note_text = work_notes or f"Incident state updated to {mapped_status}."
         notes_list.append({
             "note_id": generate_id("note"),
             "timestamp": current_time.isoformat(),
-            "author": payload.get("author") or "ServiceNow Webhook",
+            "author": payload.get("author") or "Enterprise SIR Webhook",
             "text": note_text,
         })
         incident.investigation_notes = notes_list

@@ -98,7 +98,7 @@ export const SecOpsPage: React.FC = () => {
   const [simulating, setSimulating] = useState(false);
   const [simResult, setSimResult] = useState<any | null>(null);
 
-  // ServiceNow SIR Integration State
+  // Enterprise SIR Integration State
   const [snStatus, setSnStatus] = useState<ServiceNowStatusResponse | null>(null);
   const [loadingSn, setLoadingSn] = useState(false);
   const [testSnViolation, setTestSnViolation] = useState('DENY_PURPOSE_MISMATCH');
@@ -258,7 +258,7 @@ export const SecOpsPage: React.FC = () => {
       const data = await apiFetch('/api/secops/servicenow/status');
       setSnStatus(data);
     } catch (err) {
-      console.error('Failed to load ServiceNow status:', err);
+      console.error('Failed to load SIR status:', err);
     } finally {
       setLoadingSn(false);
     }
@@ -292,7 +292,7 @@ export const SecOpsPage: React.FC = () => {
         }),
       });
       setTestSnResult(res);
-      setActionSuccess(`ServiceNow SIR Incident opened: ${res.servicenow_number} (${res.incident_id})`);
+      setActionSuccess(`SIR Incident opened: ${res.servicenow_number} (${res.incident_id})`);
       fetchServiceNowStatus();
       fetchIncidents();
       fetchSummary();
@@ -313,7 +313,7 @@ export const SecOpsPage: React.FC = () => {
           number: webhookSimNumber.trim(),
           state: webhookSimState,
           work_notes: webhookSimNotes,
-          author: 'ServiceNow SecOps Analyst (David Miller)',
+          author: 'SecOps Incident Analyst (David Miller)',
         }),
       });
       setActionSuccess(`Inbound webhook processed: ${res.incident_id} updated to ${res.incident_status}`);
@@ -750,7 +750,7 @@ export const SecOpsPage: React.FC = () => {
       <div className="page-header-row">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-            <h1 className="page-title">ServiceNow SecOps & WAF Defense Center</h1>
+            <h1 className="page-title">SecOps & WAF Defense Center</h1>
             <span
               style={{
                 fontSize: '0.7rem',
@@ -847,7 +847,7 @@ export const SecOpsPage: React.FC = () => {
             {loadingSummary ? '...' : summary?.active_incidents ?? 0}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--accent-crimson)', fontWeight: 600, marginTop: '0.35rem' }}>
-            ServiceNow SIR Queue
+            Enterprise SIR Queue
           </div>
         </div>
 
@@ -939,7 +939,7 @@ export const SecOpsPage: React.FC = () => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              ServiceNow Sync
+              Enterprise SIR Sync
             </span>
             <Activity size={16} color="#15803d" />
           </div>
@@ -970,7 +970,7 @@ export const SecOpsPage: React.FC = () => {
           { id: 'threat_intel', label: 'Threat Intelligence (TISC)', count: threatIntel.length },
           { id: 'audit_events', label: 'Security Audit Log' },
           { id: 'simulator', label: 'Interactive WAF Simulator' },
-          { id: 'servicenow', label: 'ServiceNow Integration' },
+          { id: 'servicenow', label: 'Enterprise SIR Adapter' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1013,7 +1013,7 @@ export const SecOpsPage: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Flame size={18} color="var(--accent-crimson)" />
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  ServiceNow SIR Incidents
+                  Security Incident Response (SIR) Tickets
                 </h3>
               </div>
 
@@ -1074,7 +1074,7 @@ export const SecOpsPage: React.FC = () => {
                       <th style={{ padding: '0.65rem 0.5rem' }}>Title</th>
                       <th style={{ padding: '0.65rem 0.5rem' }}>Severity</th>
                       <th style={{ padding: '0.65rem 0.5rem' }}>Status</th>
-                      <th style={{ padding: '0.65rem 0.5rem' }}>ServiceNow #</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Incident Ticket #</th>
                       <th style={{ padding: '0.65rem 0.5rem' }}>Action</th>
                     </tr>
                   </thead>
@@ -1177,7 +1177,7 @@ export const SecOpsPage: React.FC = () => {
                   }}
                 >
                   <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>ServiceNow Ticket:</span>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>Incident Ticket:</span>
                     <strong style={{ color: 'var(--accent-crimson)', fontFamily: 'monospace' }}>
                       {selectedIncident.servicenow_number || 'N/A'}
                     </strong>
@@ -1810,16 +1810,16 @@ export const SecOpsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 6: SERVICENOW SIR INTEGRATION */}
+      {/* TAB 6: ENTERPRISE SIR INTEGRATION */}
       {activeTab === 'servicenow' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
           {/* Status & Test Creator */}
           <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-              ServiceNow SecOps SIR Bi-Directional Adapter
+              Enterprise SecOps SIR Bi-Directional Adapter
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-              Demonstrates automatic incident creation in ServiceNow SIR table (<code>sn_si_incident</code>) upon zero-trust PDP purpose mismatch or high-risk attacks.
+              Demonstrates automatic incident creation in enterprise SIR table (<code>sn_si_incident</code>) upon zero-trust PDP purpose mismatch or high-risk attacks.
             </p>
 
             {/* Config & Health */}
@@ -1835,7 +1835,9 @@ export const SecOpsPage: React.FC = () => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Instance Endpoint:</span>
-                <strong style={{ fontFamily: 'monospace' }}>{snStatus?.instance_url || 'https://dev-secops.service-now.com'}</strong>
+                <strong style={{ fontFamily: 'monospace' }}>
+                  {snStatus?.instance_url ? snStatus.instance_url.replace(/service-now\.com/g, 'enterprise-sir.internal') : 'https://dev-secops.enterprise-sir.internal'}
+                </strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Target SIR Table:</span>
@@ -1844,7 +1846,7 @@ export const SecOpsPage: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Adapter Mode:</span>
                 <span style={{ color: '#15803d', fontWeight: 700 }}>
-                  {snStatus?.mock_mode ? 'Deterministic Mock SIR Provider' : 'Live ServiceNow REST API'}
+                  {snStatus?.mock_mode ? 'Deterministic Mock SIR Provider' : 'Live Enterprise SIR REST API'}
                 </span>
               </div>
             </div>
@@ -1896,10 +1898,10 @@ export const SecOpsPage: React.FC = () => {
                 disabled={testingSn}
                 className="btn btn-primary"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                id="test-servicenow-btn"
+                id="test-sir-btn"
               >
                 <Server size={15} />
-                <span>{testingSn ? 'Transmitting to ServiceNow...' : 'Auto-Open SIR Incident via Webhook'}</span>
+                <span>{testingSn ? 'Transmitting to Incident Desk...' : 'Auto-Open SIR Incident via Webhook'}</span>
               </button>
             </div>
           </div>
@@ -1907,14 +1909,14 @@ export const SecOpsPage: React.FC = () => {
           {/* Inbound Webhook Simulator */}
           <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-              Inbound ServiceNow Webhook Listener
+              Inbound SIR Webhook Listener
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-              Simulates ServiceNow sending an inbound webhook updating an existing incident status and writing analyst investigation notes.
+              Simulates enterprise incident desk sending an inbound webhook updating an existing incident status and writing analyst investigation notes.
             </p>
 
             <div style={{ marginBottom: '0.65rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>ServiceNow Incident #</label>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>SIR Incident Ticket #</label>
               <input
                 type="text"
                 placeholder="SIR0010001"
@@ -1956,7 +1958,7 @@ export const SecOpsPage: React.FC = () => {
               id="send-inbound-webhook-btn"
             >
               <Send size={15} />
-              <span>{sendingInbound ? 'Dispatching Webhook...' : 'Simulate Inbound ServiceNow Webhook'}</span>
+              <span>{sendingInbound ? 'Dispatching Webhook...' : 'Simulate Inbound SIR Webhook'}</span>
             </button>
           </div>
         </div>

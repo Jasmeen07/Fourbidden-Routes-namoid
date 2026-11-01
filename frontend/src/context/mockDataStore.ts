@@ -1875,7 +1875,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
             note_id: `note_${Date.now()}`,
             timestamp: new Date().toISOString(),
             author: 'WAF Gateway Sentinel',
-            text: `Interception rule matched: ${patternMatched}. Dispatched to ServiceNow SIR.`,
+            text: `Interception rule matched: ${patternMatched}. Dispatched to Enterprise SIR.`,
           },
         ],
         servicenow_number: snNum,
@@ -1912,7 +1912,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     };
   }
 
-  // S11. ServiceNow SIR Integration Status
+  // S11. Enterprise SIR Integration Status
   if (pathname === '/api/secops/servicenow/status' && method === 'GET') {
     const incidents = getStoredIncidents();
     const snIncidents = incidents
@@ -1932,7 +1932,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     return {
       enabled: true,
       mock_mode: true,
-      instance_url: 'https://dev208941.service-now.com',
+      instance_url: 'https://dev208941.enterprise-sir.internal',
       webhook_configured: true,
       table: 'sn_si_incident',
       total_incidents_opened: snIncidents.length,
@@ -1941,7 +1941,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     };
   }
 
-  // S12. Test ServiceNow Dispatch
+  // S12. Test Enterprise SIR Dispatch
   if (pathname === '/api/secops/servicenow/test' && method === 'POST') {
     const body = options.body ? JSON.parse(String(options.body)) : {};
     const incidents = getStoredIncidents();
@@ -1949,7 +1949,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     const newIncId = `INC-2026-${Math.floor(Math.random() * 900) + 100}`;
     const newInc: SecurityIncident = {
       id: newIncId,
-      title: `ServiceNow SIR Test: ${body.violation_code || 'DENY_PURPOSE_MISMATCH'}`,
+      title: `Enterprise SIR Test: ${body.violation_code || 'DENY_PURPOSE_MISMATCH'}`,
       description: `Security governance breach reported for caller ${body.caller_sub || 'alice'} on resource ${body.resource_id || 'finance.csv'}`,
       source_ip: '198.51.100.99',
       severity: 'HIGH',
@@ -1957,13 +1957,13 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
       status: 'NEW',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      assigned_to: 'ServiceNow SecOps Analyst',
+      assigned_to: 'SecOps Incident Analyst',
       investigation_notes: [
         {
           note_id: `note_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          author: 'ServiceNow Webhook Sync',
-          text: `Purpose declared: "${body.declared_purpose || 'UNAUTHORIZED'}". Dispatched to ServiceNow table sn_si_incident.`,
+          author: 'SIR Webhook Sync',
+          text: `Purpose declared: "${body.declared_purpose || 'UNAUTHORIZED'}". Dispatched to enterprise SIR table sn_si_incident.`,
         },
       ],
       servicenow_number: snNum,
@@ -1980,11 +1980,11 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
       servicenow_number: newInc.servicenow_number,
       servicenow_sys_id: newInc.servicenow_sys_id,
       status: 'DISPATCHED',
-      message: 'Security violation dispatched to ServiceNow Security Incident Response (SIR) table sn_si_incident.',
+      message: 'Security violation dispatched to Enterprise Security Incident Response (SIR) table sn_si_incident.',
     };
   }
 
-  // S13. Inbound ServiceNow Webhook
+  // S13. Inbound SIR Webhook
   if (pathname === '/api/secops/servicenow/webhook' && method === 'POST') {
     const body = options.body ? JSON.parse(String(options.body)) : {};
     const incidents = getStoredIncidents();
@@ -2001,7 +2001,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
         target.investigation_notes.push({
           note_id: `note_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          author: body.author || 'ServiceNow Analyst',
+          author: body.author || 'SIR Analyst',
           text: body.work_notes,
         });
       }
@@ -2014,7 +2014,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
         incident_id: target.id,
         servicenow_number: target.servicenow_number,
         incident_status: target.status,
-        message: `Bi-directional sync complete: Incident ${target.id} updated via ServiceNow webhook.`,
+        message: `Bi-directional sync complete: Incident ${target.id} updated via SIR webhook.`,
       };
     }
 
