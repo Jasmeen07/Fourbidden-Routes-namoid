@@ -150,8 +150,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (identStr.includes('risk') || identStr.includes('compliance') || identStr.includes('elena')) {
           return ['risk_reviewer', 'COMPLIANCE', 'requester'];
         }
-        // Standard interactive demo NamoID user: grant multi-party roles so user can test requests, approvals, and grants
-        return ['requester', 'ML_ENGINEER', 'manager', 'risk_reviewer', 'resource_owner'];
+        // Standard interactive demo NamoID user: grant full multi-party & admin roles so user can explore Enterprise Architecture, requests, approvals, and grants
+        return ['admin', 'executive', 'manager', 'risk_reviewer', 'resource_owner', 'requester', 'ML_ENGINEER'];
       };
 
       // Authenticate with backend session via real token validation endpoint

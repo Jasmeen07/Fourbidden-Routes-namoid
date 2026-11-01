@@ -521,7 +521,7 @@ def get_my_access_dashboard(
         }
 
     # =========================================================================
-    # SECTION 5: ADMINISTRATOR CONSOLE (Hierarchy & AI Governance Retained)
+    # SECTION 5: ENTERPRISE ARCHITECTURE & ADMIN (Hierarchy & AI Governance)
     # =========================================================================
     admin_data = None
     if is_admin:
@@ -529,8 +529,8 @@ def get_my_access_dashboard(
         admin_data = {
             "is_admin": True,
             "hierarchy_tree": hierarchy_data,
-            "total_users": db.execute(select(User).where(User.is_agent.is_(False))).scalars().all().__len__(),
-            "total_agents": db.execute(select(User).where(User.is_agent.is_(True))).scalars().all().__len__(),
+            "total_users": len(db.execute(select(User).where(User.is_agent.is_(False))).scalars().all()),
+            "total_agents": len(db.execute(select(User).where(User.is_agent.is_(True))).scalars().all()),
         }
 
     return {

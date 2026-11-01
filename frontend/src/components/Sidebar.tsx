@@ -73,7 +73,7 @@ export const Sidebar: React.FC = () => {
       badgeStyle: { background: '#e11d48' },
     },
     { label: 'Datasets & Models', path: '/catalog', icon: Box, matchPaths: ['/catalog'] },
-    { label: 'Relationship View', path: '/relationships', icon: Share2, matchPaths: ['/relationships'] },
+    { label: 'Enterprise Architecture', path: '/relationships', icon: Share2, matchPaths: ['/relationships'] },
     {
       label: 'Active Grants',
       path: '/grants',

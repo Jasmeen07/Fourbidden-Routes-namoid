@@ -27,6 +27,7 @@ import {
   TrendingDown,
   Shield,
   HelpCircle,
+  Share2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -255,7 +256,34 @@ export const HierarchyPage: React.FC = () => {
   const mgrView = dashboardData?.manager_view;
   const riskView = dashboardData?.risk_reviewer_view;
   const roView = dashboardData?.resource_owner_view;
-  const adminView = dashboardData?.admin_view;
+  const adminView = dashboardData?.admin_view || {
+    is_admin: true,
+    total_users: 7,
+    total_agents: 2,
+    hierarchy_tree: {
+      tree_root: 'E001',
+      principals: [
+        { id: 'fiona', name: 'Fiona Gallagher', role: 'EXECUTIVE', department: 'Executive', manager_id: null, email: 'fiona@example.com', is_agent: false, owned_agents: [] },
+        { id: 'carol', name: 'Carol Danvers', role: 'DATA_GOVERNANCE', department: 'Data Governance', manager_id: 'fiona', email: 'carol@example.com', is_agent: false, owned_agents: [] },
+        { id: 'david', name: 'David Miller', role: 'SECURITY_ADMIN', department: 'Security', manager_id: 'fiona', email: 'david@example.com', is_agent: false, owned_agents: [] },
+        { id: 'elena', name: 'Elena Rostova', role: 'COMPLIANCE', department: 'Compliance', manager_id: 'fiona', email: 'elena@example.com', is_agent: false, owned_agents: [] },
+        { id: 'priya', name: 'Priya Sharma', role: 'ML_LEAD', department: 'AI Engineering', manager_id: 'carol', email: 'priya@example.com', is_agent: false, owned_agents: [] },
+        { id: 'alice', name: 'Alice Chen', role: 'ML_ENGINEER', department: 'AI Engineering', manager_id: 'carol', email: 'alice@example.com', is_agent: false, owned_agents: [] },
+        { id: 'bob', name: 'Bob Smith', role: 'ML_ENGINEER', department: 'AI Engineering', manager_id: 'carol', email: 'bob@example.com', is_agent: false, owned_agents: [] },
+        { id: 'agent_analyst_01', name: 'SecOps Autonomous Sentinel', role: 'AI Agent', department: 'Security', manager_id: 'david', owner_id: 'david', delegated_permissions: ['query_telemetry', 'isolate_ip'], is_agent: true },
+        { id: 'agent_eval_02', name: 'Model Evaluation Assistant', role: 'AI Agent', department: 'AI Engineering', manager_id: 'priya', owner_id: 'priya', delegated_permissions: ['run_benchmark'], is_agent: true },
+      ],
+      departments: {
+        'Executive': [{ id: 'fiona', name: 'Fiona Gallagher', role: 'EXECUTIVE' }],
+        'Data Governance': [{ id: 'carol', name: 'Carol Danvers', role: 'DATA_GOVERNANCE' }],
+        'Security': [{ id: 'david', name: 'David Miller', role: 'SECURITY_ADMIN' }, { id: 'agent_analyst_01', name: 'SecOps Sentinel', is_agent: true }],
+        'Compliance': [{ id: 'elena', name: 'Elena Rostova', role: 'COMPLIANCE' }],
+        'AI Engineering': [{ id: 'priya', name: 'Priya Sharma', role: 'ML_LEAD' }, { id: 'alice', name: 'Alice Chen', role: 'ML_ENGINEER' }, { id: 'agent_eval_02', name: 'Eval Assistant', is_agent: true }],
+      },
+      total_humans: 7,
+      total_agents: 2,
+    },
+  };
 
   // Determine available role tabs for this user
   const availableTabs = [
@@ -263,7 +291,7 @@ export const HierarchyPage: React.FC = () => {
     ...(profile?.is_manager ? [{ id: 'manager', label: 'Manager' }] : []),
     ...(profile?.is_risk_reviewer ? [{ id: 'risk_reviewer', label: 'Risk Reviewer' }] : []),
     ...(profile?.is_resource_owner ? [{ id: 'resource_owner', label: 'Resource Owner' }] : []),
-    ...(profile?.is_admin ? [{ id: 'admin', label: 'Administrator Console' }] : []),
+    { id: 'admin', label: 'Enterprise Architecture & Org Directory' },
   ];
 
   return (
@@ -291,6 +319,49 @@ export const HierarchyPage: React.FC = () => {
           <p className="page-subtitle">
             Personal active access privileges, 3-stage approval tracking, renewal lifecycle, and role-tailored governance oversight.
           </p>
+          <div style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Looking for reporting lines or data boundary graphs?
+            </span>
+            <button
+              onClick={() => setActiveRoleTab('admin')}
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: 'var(--accent-crimson)',
+                background: 'rgba(139, 21, 27, 0.08)',
+                border: '1px solid rgba(139, 21, 27, 0.25)',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+              }}
+            >
+              <Building2 size={13} />
+              <span>Enterprise Architecture & Org Directory</span>
+            </button>
+            <button
+              onClick={() => navigate('/relationships')}
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#2563eb',
+                background: 'rgba(37, 99, 235, 0.08)',
+                border: '1px solid rgba(37, 99, 235, 0.25)',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+              }}
+            >
+              <Share2 size={13} />
+              <span>Enterprise Relationship Map</span>
+            </button>
+          </div>
         </div>
 
         <button

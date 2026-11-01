@@ -150,9 +150,9 @@ export const RelationshipViewPage: React.FC = () => {
       {/* Page Title & Intro */}
       <div className="page-header">
         <div>
-          <h1 className="page-title font-serif">Relationship View & Safeguards</h1>
+          <h1 className="page-title font-serif">Enterprise Architecture & Relationship Safeguards</h1>
           <p className="page-subtitle">
-            Real-time multi-resource relationship protection preventing indirect inference and Separation-of-Duties (SoD) collisions.
+            Zero-Trust multi-resource relationship topology, cross-tier inference protection, and Separation-of-Duties (SoD) boundary graph.
           </p>
         </div>
 
