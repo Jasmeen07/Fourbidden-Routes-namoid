@@ -12,7 +12,7 @@ from app.domain.errors import DomainError
 from app.api.problems import domain_error_handler
 from app.db.engine import init_database, SessionLocal
 from app.services.grants import GrantsService
-from app.api import auth, resources, requests, grants, sim, audit, policy, ops, hierarchy, provenance, secops
+from app.api import auth, resources, requests, grants, sim, audit, policy, ops, hierarchy, provenance, secops, my_access
 
 
 @asynccontextmanager
@@ -138,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(hierarchy.router)
     app.include_router(provenance.router)
     app.include_router(secops.router)
+    app.include_router(my_access.router)
 
     return app
 

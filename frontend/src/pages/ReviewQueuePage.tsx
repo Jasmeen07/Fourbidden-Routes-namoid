@@ -161,7 +161,7 @@ export const ReviewQueuePage: React.FC = () => {
       {/* Header */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">FORGE Governance Approvals Queue</h1>
+          <h1 className="page-title">Governance Approvals Queue</h1>
           <p className="page-subtitle">
             Organizational hierarchy decision enforcement: Immediate Superior routing and Crucial Data multi-tier escalation.
           </p>

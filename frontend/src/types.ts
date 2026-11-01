@@ -193,12 +193,56 @@ export interface ProvenanceEventNode {
   propagated_labels?: string[];
   is_tainted?: boolean;
   has_secret?: boolean;
+  untrusted_influences?: string[];
+  sensitive_influences?: string[];
+  enforcement_status?: 'ALLOWED' | 'BLOCKED' | 'MONITORED';
+  enforcement_reason?: string | null;
+  enforcement_policy?: string | null;
 }
 
 export interface ProvenanceEventEdge {
   id: string;
   source_id: string;
   target_id: string;
+}
+
+export interface ProvenanceSecurityAlert {
+  id: string;
+  event_id: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  category: 'SUSPICIOUS_PROMPT' | 'SENSITIVE_DATA_ACCESS' | 'DATA_LEAKAGE_ATTEMPT' | 'TAINT_SECRET_CONVERGENCE';
+  title: string;
+  description: string;
+  timestamp: string;
+  agent_id: string;
+  action?: string | null;
+  status: string;
+  resource_id?: string | null;
+  target_destination?: string | null;
+}
+
+export interface ProvenanceAuditItem {
+  event_id: string;
+  timestamp: string;
+  agent_id: string;
+  event_type: string;
+  action: string;
+  target: string;
+  is_tainted: boolean;
+  has_secret: boolean;
+  enforcement_decision: 'ALLOWED' | 'BLOCKED' | 'MONITORED';
+  enforcement_reason?: string | null;
+  policy?: string | null;
+  payload?: any;
+}
+
+export interface ProvenanceKpis {
+  monitored_events: number;
+  risky_events: number;
+  blocked_transmissions: number;
+  active_ai_agents: number;
+  clean_events: number;
+  active_agents_list: string[];
 }
 
 export interface AuditEvent {

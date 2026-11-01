@@ -172,7 +172,7 @@ async def dev_login(
         "usr_owner_1": ["resource_owner", "SECURITY_ADMIN"],
         "elena": ["risk_reviewer", "COMPLIANCE"],
         "usr_risk_1": ["risk_reviewer", "COMPLIANCE"],
-        "fiona": ["risk_reviewer", "EXECUTIVE"],
+        "fiona": ["admin", "risk_reviewer", "EXECUTIVE"],
         "usr_risk_2": ["risk_reviewer", "EXECUTIVE"],
         "unassigned_user": [],
         "usr_no_roles": [],

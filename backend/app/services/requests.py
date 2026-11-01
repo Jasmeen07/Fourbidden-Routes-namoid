@@ -123,7 +123,7 @@ class RequestsService:
                     AccessRequest.status.in_([RequestStatus.IN_REVIEW.value, RequestStatus.BLOCKED.value]),
                 )
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if existing_open:
             raise DuplicateRequestError(
                 "An open request already exists for this resource and purpose",
@@ -131,7 +131,7 @@ class RequestsService:
             )
 
         # 9. Check if an active grant already covers this ask (EC-R07)
-        active_grant = db.execute(
+        active_grants = db.execute(
             select(Grant).where(
                 and_(
                     Grant.requester_sub == requester_sub,
@@ -141,13 +141,14 @@ class RequestsService:
                     Grant.revoked_at.is_(None),
                 )
             )
-        ).scalar_one_or_none()
-        if active_grant and compute_effective_status(active_grant, current_time).value == "ACTIVE":
-            if set(actions).issubset(set(active_grant.actions)):
-                raise GrantAlreadyActiveError(
-                    "An active grant already covers the requested actions and purpose",
-                    details={"grant_id": active_grant.id}
-                )
+        ).scalars().all()
+        for active_grant in active_grants:
+            if compute_effective_status(active_grant, current_time).value == "ACTIVE":
+                if not extends_grant_id and set(actions).issubset(set(active_grant.actions)):
+                    raise GrantAlreadyActiveError(
+                        "An active grant already covers the requested actions and purpose",
+                        details={"grant_id": active_grant.id}
+                    )
 
         # Compute content hash
         content_hash = compute_request_content_hash(

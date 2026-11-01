@@ -9,7 +9,7 @@ Adheres strictly to AGENTS.md rules:
 from datetime import datetime, timezone, timedelta
 import ipaddress
 import json
-from typing import Any
+from typing import Any, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, desc
 

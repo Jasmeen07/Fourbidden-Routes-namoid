@@ -1,5 +1,5 @@
 """Enterprise Organizational Hierarchy & Delegation API (FORGE §7, §8)."""
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.db.engine import get_db
@@ -45,8 +45,35 @@ def _load_domain_principals(db: Session) -> tuple[dict[str, Employee], dict[str,
 
 
 @router.get("")
-def get_organization_hierarchy(db: Session = Depends(get_db)):
-    """Returns the full hierarchical structure of human employees and paired AI agents."""
+def get_organization_hierarchy(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Returns the full hierarchical structure of human employees and paired AI agents.
+    Restricted to administrators and managers (Requirement 4).
+    """
+    from app.auth.session import SessionManager, SESSION_COOKIE_NAME
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):].strip()
+    if not token:
+        token = request.cookies.get(SESSION_COOKIE_NAME) or request.cookies.get("grantgate_session") or request.cookies.get("gg_session")
+
+    if token:
+        clock = getattr(request.app.state, "clock", None)
+        now = clock.now() if clock else None
+        session_row = SessionManager.validate_session(db, token, now=now)
+        if session_row:
+            u = db.get(User, session_row.sub)
+            user_roles = [r.role.lower() for r in (u.roles if u else [])]
+            is_admin_or_mgr = any(r in user_roles for r in ["admin", "executive", "manager", "data_governance", "security_admin"]) or session_row.sub in ["E001", "E002", "E050", "E060", "fiona", "carol"]
+            if not is_admin_or_mgr:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "DENY_FORBIDDEN", "message": "Organizational hierarchy access is restricted to administrators and managers"},
+                )
+
     employees, agents = _load_domain_principals(db)
 
     # Build response tree

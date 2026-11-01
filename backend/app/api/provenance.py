@@ -14,6 +14,7 @@ from app.domain.provenance import (
     ProvenanceGraph,
     compute_taint_and_secrets,
     evaluate_network_guardrails,
+    find_influencing_sources,
     DEFAULT_APPROVED_DESTINATIONS,
 )
 
@@ -95,11 +96,12 @@ def _build_provenance_graph(db: Session) -> tuple[ProvenanceGraph, list[dict], l
 
 @router.get("/events")
 def get_provenance_graph(db: Session = Depends(get_db)):
-    """Returns the full provenance dependency graph with propagated taint & secret labels."""
+    """Returns the full provenance dependency graph with propagated taint & secret labels,
+    security overview KPIs, live alerts, and enforcement audit trail."""
     graph, nodes_json, edges_json = _build_provenance_graph(db)
     propagated_labels = compute_taint_and_secrets(graph)
 
-    # Attach computed taint state to each node
+    # Attach computed taint state, influences, and guardrail enforcement to each node
     for node in nodes_json:
         node_id = node["id"]
         labels = list(propagated_labels.get(node_id, set()))
@@ -107,11 +109,134 @@ def get_provenance_graph(db: Session = Depends(get_db)):
         node["is_tainted"] = "tainted" in labels
         node["has_secret"] = "has_secret" in labels
 
+        # Compute causal predecessor influences
+        influences = find_influencing_sources(node_id, graph)
+        node["untrusted_influences"] = influences.get("untrusted_inputs", [])
+        node["sensitive_influences"] = influences.get("sensitive_inputs", [])
+
+        # Evaluate enforcement logic for external sends or destinations
+        if node["event_type"] == "external_send" or node.get("target_destination"):
+            allowed, reason, policy = evaluate_network_guardrails(
+                action=node.get("action") or "external_send",
+                destination=node.get("target_destination"),
+                propagated_labels=set(labels),
+            )
+            node["enforcement_status"] = "ALLOWED" if allowed else "BLOCKED"
+            node["enforcement_reason"] = reason
+            node["enforcement_policy"] = policy
+        else:
+            node["enforcement_status"] = "MONITORED"
+            node["enforcement_reason"] = "Internal execution step monitored by provenance observer."
+            node["enforcement_policy"] = None
+
+    # Query active AI agents from DB
+    agent_subs_db = set(db.execute(select(User.sub).where(User.is_agent == True)).scalars().all())
+    event_agents = set(n["principal_id"] for n in nodes_json if n.get("principal_id"))
+    all_agents = sorted(list(agent_subs_db | event_agents))
+
+    # Real-time KPIs calculated from actual data
+    total_monitored_events = len(nodes_json)
+    risky_events = sum(1 for n in nodes_json if n["is_tainted"] or n["has_secret"])
+    blocked_transmissions = sum(1 for n in nodes_json if n.get("enforcement_status") == "BLOCKED")
+    active_ai_agents_count = len(all_agents)
+
+    # Generate live Security Alerts based on verified security states
+    security_alerts = []
+    for n in nodes_json:
+        # 1. Suspicious input / Prompt injection risk
+        if n["label"] == "untrusted_input" or (n.get("payload") and isinstance(n["payload"], dict) and n["payload"].get("injection_detected")):
+            security_alerts.append({
+                "id": f"alert_prompt_{n['id']}",
+                "event_id": n["id"],
+                "severity": "HIGH",
+                "category": "SUSPICIOUS_PROMPT",
+                "title": f"Untrusted External Input Ingestion ({n['id']})",
+                "description": f"Agent {n['principal_id']} ingested unverified prompt/document data ({n.get('resource_id') or n.get('action') or 'external input'}). Taint propagated downstream.",
+                "timestamp": n["timestamp"],
+                "agent_id": n["principal_id"],
+                "action": n.get("action"),
+                "status": "ACTIVE_TAINT",
+            })
+
+        # 2. Confidential / sensitive data access
+        if n["label"] == "sensitive_input" or n.get("resource_id"):
+            security_alerts.append({
+                "id": f"alert_secret_{n['id']}",
+                "event_id": n["id"],
+                "severity": "MEDIUM",
+                "category": "SENSITIVE_DATA_ACCESS",
+                "title": f"Confidential Resource Accessed ({n.get('resource_id') or n['id']})",
+                "description": f"Agent {n['principal_id']} accessed sensitive resource '{n.get('resource_id') or 'confidential asset'}'. Confidentiality label HasSecret(e) attached.",
+                "timestamp": n["timestamp"],
+                "agent_id": n["principal_id"],
+                "action": n.get("action"),
+                "status": "SECRET_TAGGED",
+            })
+
+        # 3. Blocked exfiltration / data leakage attempt
+        if n.get("enforcement_status") == "BLOCKED":
+            security_alerts.append({
+                "id": f"alert_leak_{n['id']}",
+                "event_id": n["id"],
+                "severity": "CRITICAL",
+                "category": "DATA_LEAKAGE_ATTEMPT",
+                "title": f"Blocked External Exfiltration ({n.get('target_destination') or n['id']})",
+                "description": f"Network Guardrails actively BLOCKED transmission to '{n.get('target_destination')}'. Rule: {n.get('enforcement_policy')}. Reason: {n.get('enforcement_reason')}",
+                "timestamp": n["timestamp"],
+                "agent_id": n["principal_id"],
+                "action": n.get("action"),
+                "status": "BLOCKED",
+            })
+
+        # 4. Taint-Secret convergence in agent reasoning
+        if n["is_tainted"] and n["has_secret"] and n["event_type"] != "external_send":
+            security_alerts.append({
+                "id": f"alert_dual_{n['id']}",
+                "event_id": n["id"],
+                "severity": "HIGH",
+                "category": "TAINT_SECRET_CONVERGENCE",
+                "title": f"Agent Context Tainted with Secrets ({n['id']})",
+                "description": f"Agent {n['principal_id']} merged untrusted input with confidential secrets during '{n.get('action')}'. Complete mediation rule Deny(a) primed for any external send.",
+                "timestamp": n["timestamp"],
+                "agent_id": n["principal_id"],
+                "action": n.get("action"),
+                "status": "CONVERGENCE_DETECTED",
+            })
+
+    # Chronological Audit Trail
+    audit_trail = [
+        {
+            "event_id": n["id"],
+            "timestamp": n["timestamp"],
+            "agent_id": n["principal_id"],
+            "event_type": n["event_type"],
+            "action": n.get("action") or "unspecified",
+            "target": n.get("target_destination") or n.get("resource_id") or "internal_pipeline",
+            "is_tainted": n["is_tainted"],
+            "has_secret": n["has_secret"],
+            "enforcement_decision": n.get("enforcement_status", "MONITORED"),
+            "enforcement_reason": n.get("enforcement_reason"),
+            "policy": n.get("enforcement_policy"),
+            "payload": n.get("payload"),
+        }
+        for n in sorted(nodes_json, key=lambda x: x["timestamp"], reverse=True)
+    ]
+
     return {
         "nodes": nodes_json,
         "edges": edges_json,
         "approved_destinations": list(DEFAULT_APPROVED_DESTINATIONS),
         "guardrail_rule": "Deny(a) :- ExternalSend(a), Tainted(a), HasSecret(a)",
+        "kpis": {
+            "monitored_events": total_monitored_events,
+            "risky_events": risky_events,
+            "blocked_transmissions": blocked_transmissions,
+            "active_ai_agents": active_ai_agents_count,
+            "clean_events": total_monitored_events - risky_events,
+            "active_agents_list": all_agents,
+        },
+        "security_alerts": security_alerts,
+        "audit_trail": audit_trail,
     }
 
 

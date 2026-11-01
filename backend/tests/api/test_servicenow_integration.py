@@ -35,6 +35,18 @@ def setup_sn_test_data(db: Session):
         db.add(user)
         db.add(UserRole(sub="alice", role="ML_ENGINEER"))
 
+    david = db.get(User, "david")
+    if not david:
+        david = User(
+            sub="david",
+            display_name="David Martinez",
+            email="david@test.com",
+            department="Finance",
+            active=True,
+        )
+        db.add(david)
+        db.add(UserRole(sub="david", role="RESOURCE_OWNER"))
+
     # 2. Ensure resource
     res = db.get(Resource, "finance.csv")
     if not res:

@@ -15,6 +15,7 @@ import {
   Users,
   Radio,
   ShieldAlert,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,8 +27,8 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: Home, matchPaths: ['/', '/dashboard'] },
     { label: 'SecOps & WAF Defense', path: '/secops', icon: ShieldAlert, matchPaths: ['/secops'] },
-    { label: 'Org Hierarchy & Agents', path: '/hierarchy', icon: Users, matchPaths: ['/hierarchy'] },
-    { label: 'Dependency & Guardrails', path: '/provenance', icon: Radio, matchPaths: ['/provenance'] },
+    { label: 'My Access & Security', path: '/hierarchy', icon: ShieldCheck, matchPaths: ['/hierarchy'] },
+    { label: 'AI Security Command Center', path: '/provenance', icon: Activity, matchPaths: ['/provenance'] },
     { label: 'Access Requests', path: '/requests', icon: FileText, matchPaths: ['/requests', '/requests/new'] },
     { label: 'Approvals', path: '/reviews', icon: CheckSquare, matchPaths: ['/reviews'] },
     { label: 'Datasets & Models', path: '/catalog', icon: Box, matchPaths: ['/catalog'] },
