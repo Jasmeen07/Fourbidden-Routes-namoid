@@ -59,9 +59,9 @@ export const AuthCallbackPage: React.FC = () => {
         // 7. Store tokens strictly in memory (via AuthContext state)
         await setNamoIDAuth(result);
 
-        // Small delay so user sees confirmation, then transition to dashboard
+        // Small delay so user sees confirmation, then transition to role dashboard
         setTimeout(() => {
-          navigate('/catalog', { replace: true });
+          navigate('/hierarchy', { replace: true });
         }, 800);
       } catch (err: any) {
         console.error('NamoID Callback Error:', err);

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SignIn, HostedAuthButton, NamoIDSignIn, useAuthConfig } from '@namoidhq/react';
 import type { CompletedHostedAuth } from '@namoidhq/react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Lock, CheckCircle2, ArrowRight, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Shield, Lock, CheckCircle2, ArrowRight, AlertTriangle, ExternalLink, Users } from 'lucide-react';
 
 export const SignInPage: React.FC = () => {
   const navigate = useNavigate();
@@ -73,7 +73,7 @@ export const SignInPage: React.FC = () => {
         </div>
 
         {/* Status if already signed in */}
-        {isNamoIDAuthenticated && user ? (
+        {user ? (
           <div style={{
             background: '#ecfdf5',
             border: '1px solid #a7f3d0',
@@ -84,18 +84,25 @@ export const SignInPage: React.FC = () => {
           }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#047857', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.35rem' }}>
               <CheckCircle2 size={18} />
-              <span>Signed In via NamoID</span>
+              <span>{isNamoIDAuthenticated ? 'Signed In via NamoID Hosted Auth' : 'Active Authenticated Session'}</span>
             </div>
-            <p style={{ fontSize: '0.875rem', color: '#065f46', marginBottom: '1rem' }}>
-              Authenticated as <strong>{user.display_name}</strong> ({user.sub})
+            <p style={{ fontSize: '0.875rem', color: '#065f46', marginBottom: '0.75rem' }}>
+              Authenticated as <strong>{user.display_name}</strong> (<span className="font-mono">{user.sub}</span>)
             </p>
+            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              {user.roles.map((r) => (
+                <span key={r} className="role-chip font-mono" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>
+                  {r}
+                </span>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/hierarchy')}
                 className="btn btn-primary"
                 style={{ fontSize: '0.85rem' }}
               >
-                Go to Dashboard <ArrowRight size={14} style={{ marginLeft: '0.3rem' }} />
+                Go to Role Dashboard <ArrowRight size={14} style={{ marginLeft: '0.3rem' }} />
               </button>
               <button
                 onClick={() => logout()}
@@ -116,7 +123,7 @@ export const SignInPage: React.FC = () => {
                 description="Continue with the verified sign-in methods configured in your NamoID tenant."
                 buttonLabel="Sign In with NamoID"
               />
-              <div style={{ marginTop: '0.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.75rem' }}>
                 <HostedAuthButton
                   redirectUri={redirectUri}
                   style={{
@@ -137,6 +144,22 @@ export const SignInPage: React.FC = () => {
                 >
                   <Lock size={16} /> Direct Hosted Sign In &rarr;
                 </HostedAuthButton>
+
+                <a
+                  href="/auth/login"
+                  className="btn btn-secondary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    fontSize: '0.875rem',
+                    textDecoration: 'none',
+                    padding: '0.65rem 1rem',
+                  }}
+                >
+                  <ExternalLink size={15} /> Launch Server OIDC Authorization Flow
+                </a>
               </div>
             </div>
 
@@ -177,6 +200,95 @@ export const SignInPage: React.FC = () => {
             </div>
           </>
         )}
+
+        {/* Development & Testing Role Switcher */}
+        <div style={{
+          marginTop: '1.75rem',
+          padding: '1rem',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 'var(--radius-md)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#475569', fontWeight: 700, fontSize: '0.8rem', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <Users size={15} />
+            <span>Role Testing & Verification Personas</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 0.75rem 0' }}>
+            Test the full multi-party workflow across all five authorized system roles:
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <button
+              onClick={async () => {
+                const res = await fetch('/auth/dev-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: 'priya' }),
+                });
+                if (res.ok) window.location.href = '/hierarchy';
+              }}
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: '0.74rem', justifyContent: 'flex-start', textAlign: 'left' }}
+            >
+              🧑 Priya (Requester)
+            </button>
+            <button
+              onClick={async () => {
+                const res = await fetch('/auth/dev-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: 'carol' }),
+                });
+                if (res.ok) window.location.href = '/hierarchy';
+              }}
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: '0.74rem', justifyContent: 'flex-start', textAlign: 'left' }}
+            >
+              👩‍💼 Carol (Manager)
+            </button>
+            <button
+              onClick={async () => {
+                const res = await fetch('/auth/dev-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: 'elena' }),
+                });
+                if (res.ok) window.location.href = '/hierarchy';
+              }}
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: '0.74rem', justifyContent: 'flex-start', textAlign: 'left' }}
+            >
+              🛡️ Elena (Risk Reviewer)
+            </button>
+            <button
+              onClick={async () => {
+                const res = await fetch('/auth/dev-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: 'david' }),
+                });
+                if (res.ok) window.location.href = '/hierarchy';
+              }}
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: '0.74rem', justifyContent: 'flex-start', textAlign: 'left' }}
+            >
+              💾 David (Resource Owner)
+            </button>
+            <button
+              onClick={async () => {
+                const res = await fetch('/auth/dev-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: 'fiona' }),
+                });
+                if (res.ok) window.location.href = '/hierarchy';
+              }}
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: '0.74rem', justifyContent: 'flex-start', textAlign: 'left', gridColumn: 'span 2' }}
+            >
+              ⚡ Fiona (Administrator / CISO)
+            </button>
+          </div>
+        </div>
 
         {/* Security & Memory Isolation Guarantee */}
         <div style={{

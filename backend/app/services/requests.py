@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from app.db.models import AccessRequest, ReviewSlot, Resource, User, UserRole, Grant
+from app.db.models import AccessRequest, ReviewSlot, Resource, User, UserRole, Grant, Notification
 from app.db.txn import write_txn
 from app.services.audit import AuditService
 from app.domain.limits import Limits
@@ -186,18 +186,13 @@ class RequestsService:
         resource_dept = getattr(resource, "department", "General")
         is_cross_dept = (requester_dept.lower() != resource_dept.lower())
 
-        # Determine review slot roles: Blueprint test fixtures use policy matrix; FORGE users route by cruciality/hierarchy
-        if requester_sub.startswith("usr_"):
-            required_slot_roles = list(policy.approval_matrix.get(resource.tier, ["manager"]))
-        elif is_crucial or is_cross_dept:
-            required_slot_roles = ["manager", "resource_owner", "risk_reviewer"]
-        else:
-            required_slot_roles = ["manager"]
+        # Mandatory multi-party governance: all requests route through Manager, Risk Reviewer, and Resource Owner
+        required_slot_roles = ["manager", "risk_reviewer", "resource_owner"]
 
         slots: list[ReviewSlot] = []
         is_blocked = False
 
-        # Route slots
+        # Route slots using enterprise organizational hierarchy and resource ownership
         assigned_subs = set()
         for role in required_slot_roles:
             assigned_sub = None
@@ -208,6 +203,7 @@ class RequestsService:
                 else:
                     assigned_sub = requester.manager_sub if requester else None
                 if not assigned_sub or assigned_sub == requester_sub:
+                    # Prefer department manager or designated managers
                     mgr_candidates = db.execute(
                         select(UserRole.sub).where(UserRole.role == "manager")
                     ).scalars().all()
@@ -271,6 +267,18 @@ class RequestsService:
         db.add(request_obj)
         for s in slots:
             db.add(s)
+            # Notify each assigned approver
+            db.add(
+                Notification(
+                    id=generate_id("notif"),
+                    to_sub=s.assigned_sub,
+                    kind="APPROVAL_REQUIRED",
+                    ref_id=req_id,
+                    message=f"Access request {req_id} for '{resource.name}' ({resource_id}) submitted by {requester.display_name if requester else requester_sub} requires your {s.slot_role} approval.",
+                    created_at=current_time,
+                    read_at=None,
+                )
+            )
         db.flush()
 
         # Audit event

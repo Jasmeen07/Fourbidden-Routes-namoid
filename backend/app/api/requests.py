@@ -78,37 +78,54 @@ def create_request(
 @router.get("")
 def list_requests(
     request: Request,
-    view: Literal["mine", "assigned", "visible"] = "mine",
+    view: Literal["mine", "assigned", "visible", "all"] = "mine",
     db: Session = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
     stmt = select(AccessRequest).order_by(AccessRequest.created_at.desc())
-    if view == "mine":
+    is_admin = "admin" in user.roles or "executive" in user.roles
+    if view == "all" and is_admin:
+        pass
+    elif view == "mine":
         stmt = stmt.where(AccessRequest.requester_sub == user.sub)
     elif view == "assigned":
         stmt = stmt.join(ReviewSlot).where(
             and_(
-                ReviewSlot.assigned_sub == user.sub,
                 ReviewSlot.status == "PENDING",
-            )
-        )
-    elif view == "visible":
-        stmt = stmt.outerjoin(ReviewSlot).outerjoin(Resource, AccessRequest.resource_id == Resource.id).where(
-            or_(
-                AccessRequest.requester_sub == user.sub,
-                ReviewSlot.assigned_sub == user.sub,
-                Resource.owner_sub == user.sub,
+                or_(
+                    ReviewSlot.assigned_sub == user.sub,
+                    ReviewSlot.slot_role.in_(user.roles),
+                ),
+                AccessRequest.requester_sub != user.sub,
             )
         ).distinct()
+    elif view == "visible":
+        if is_admin:
+            pass  # Admins have full operational visibility
+        else:
+            stmt = stmt.outerjoin(ReviewSlot).outerjoin(Resource, AccessRequest.resource_id == Resource.id).where(
+                or_(
+                    AccessRequest.requester_sub == user.sub,
+                    ReviewSlot.assigned_sub == user.sub,
+                    ReviewSlot.slot_role.in_(user.roles),
+                    Resource.owner_sub == user.sub,
+                )
+            ).distinct()
 
     requests = db.execute(stmt).scalars().all()
     results = []
     for r in requests:
         res = db.get(Resource, r.resource_id)
+        req_user = db.get(User, r.requester_sub)
         results.append({
             "id": r.id,
             "requester_sub": r.requester_sub,
+            "requester_name": req_user.display_name if req_user else r.requester_sub,
+            "requester_dept": req_user.department if req_user else "Engineering",
             "resource_id": r.resource_id,
+            "resource_name": res.name if res else r.resource_id,
+            "resource_tier": res.tier if res else "INTERNAL_SYNTHETIC",
+            "resource_kind": res.kind if res else "dataset",
             "purpose_code": r.purpose_code,
             "purpose_text": r.purpose_text,
             "status": r.status,
@@ -132,7 +149,6 @@ def list_requests(
                 }
                 for s in r.slots
             ],
-            "resource_name": res.name if res else r.resource_id,
             "is_crucial": bool(getattr(res, "is_crucial", False)) if res else False,
         })
     return results

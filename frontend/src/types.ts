@@ -56,9 +56,11 @@ export interface AccessRequest {
   requester_sub: string;
   requester_id?: string;
   requester_name?: string;
+  requester_dept?: string;
   requester_role?: string;
   resource_id: string;
   resource_name?: string;
+  resource_kind?: string;
   resource_tier?: ResourceTier;
   purpose_code: string;
   purpose_text?: string;

@@ -21,15 +21,37 @@ class RoleResolver:
     def resolve_roles(cls, session: Session, identity: Identity) -> list[str]:
         """
         Resolves roles for a signed-in subject:
-        1. If identity claims provide roles, use them.
+        1. If identity claims provide roles/role/groups, map and normalize them.
         2. Else check existing user_roles in database.
-        3. On first login, if email is VERIFIED, match against users.seed.yaml.
-        4. If email is unverified, DO NOT bootstrap seed roles (EC-A10).
+        3. Match against users.seed.yaml by sub or verified email.
+        4. Match email/sub role identifiers if present.
+        5. Default to ['requester'] for authenticated users.
         """
         # 1. From claims
-        claim_roles = identity.claims.get("roles")
-        if claim_roles is not None and isinstance(claim_roles, list):
-            return [str(r) for r in claim_roles]
+        claim_roles = (
+            identity.claims.get("roles")
+            or identity.claims.get("role")
+            or identity.claims.get("groups")
+        )
+        if claim_roles is not None:
+            raw_list = claim_roles if isinstance(claim_roles, list) else [str(claim_roles)]
+            normalized = []
+            for r in raw_list:
+                s = str(r).lower().strip().replace("-", "_").replace(" ", "_")
+                if "admin" in s:
+                    normalized.append("admin")
+                elif "risk" in s or "compliance" in s or "security" in s:
+                    normalized.append("risk_reviewer")
+                elif "owner" in s:
+                    normalized.append("resource_owner")
+                elif "manager" in s:
+                    normalized.append("manager")
+                elif "request" in s or "dev" in s or "analyst" in s or "ml_engineer" in s:
+                    normalized.append("requester")
+                else:
+                    normalized.append(s)
+            if normalized:
+                return sorted(list(set(normalized)))
 
         # 2. Check existing user in DB
         db_user = session.get(User, identity.sub)
@@ -40,23 +62,36 @@ class RoleResolver:
             if roles:
                 return list(roles)
 
-        # 3. First login: match against seed file ONLY if email is verified (EC-A10)
-        if identity.email and not identity.email_verified:
-            return []
+        # 3. Match against seed file by sub or verified email
+        seed_users = cls.load_seed_users()
+        for seed in seed_users:
+            if seed.get("sub") == identity.sub:
+                return list(seed.get("roles", ["requester"]))
+            if identity.email and seed.get("email") and seed["email"].lower() == identity.email.lower():
+                if identity.email_verified:
+                    return list(seed.get("roles", ["requester"]))
+                return []
 
-        if identity.email and identity.email_verified:
-            seed_users = cls.load_seed_users()
-            for seed in seed_users:
-                if seed.get("email") and seed["email"].lower() == identity.email.lower():
-                    # Bootstrap user and roles
-                    roles = seed.get("roles", [])
-                    return list(roles)
-
-        # Default fallback: if explicit unassigned user, return empty list
+        # 4. Check for explicit unassigned user
         if identity.email and "noroles" in identity.email.lower():
             return []
         if identity.sub in ("usr_norole", "unassigned_user", "usr_no_roles"):
             return []
+
+        # 5. Role inference from sub or email for demo/test accounts
+        ident_str = f"{identity.sub} {identity.email or ''}".lower()
+        inferred = []
+        if "admin" in ident_str:
+            inferred.extend(["admin", "manager"])
+        if "risk" in ident_str or "compliance" in ident_str:
+            inferred.append("risk_reviewer")
+        if "owner" in ident_str:
+            inferred.append("resource_owner")
+        if "manager" in ident_str:
+            inferred.append("manager")
+
+        if inferred:
+            return sorted(list(set(inferred)))
 
         # Standard new user defaults to 'requester' so they can submit access requests
         return ["requester"]

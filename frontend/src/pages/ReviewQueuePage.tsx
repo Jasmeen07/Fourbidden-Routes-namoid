@@ -39,54 +39,64 @@ export const ReviewQueuePage: React.FC = () => {
         const reqDetail = await apiFetch(`/api/requests/${req.id}`);
         const slots: any[] = reqDetail.slots || [];
 
+        const normalizedReq: AccessRequest = {
+          id: reqDetail.id,
+          requester_sub: reqDetail.requester_sub,
+          requester_id: reqDetail.requester_sub,
+          requester_name: reqDetail.requester_name || req.requester_name || reqDetail.requester_sub,
+          requester_dept: reqDetail.requester_dept || req.requester_dept || 'Engineering',
+          resource_id: reqDetail.resource_id,
+          resource_name: reqDetail.resource_name || req.resource_name || reqDetail.resource_id,
+          duration_minutes: reqDetail.duration_minutes,
+          duration_hours: Math.round(reqDetail.duration_minutes / 60) || 1,
+          purpose_code: reqDetail.purpose_code,
+          purpose_text: reqDetail.purpose_text,
+          purpose: reqDetail.purpose_code,
+          justification: reqDetail.purpose_text,
+          actions: reqDetail.actions || [],
+          risk_controls: reqDetail.risk_controls || [],
+          status: reqDetail.status,
+          created_at: reqDetail.created_at,
+          is_crucial: reqDetail.is_crucial || req.is_crucial,
+          slots: slots.map((s, idx) => ({
+            id: s.id,
+            slot_index: idx,
+            slot_role: s.slot_role,
+            required_role: s.slot_role,
+            assigned_sub: s.assigned_sub,
+            status: s.status,
+            decision: s.decision,
+            rationale: s.rationale,
+            decision_rationale: s.rationale,
+            decided_by_sub: s.decided_by_sub,
+            decided_at: s.decided_at,
+          })),
+        };
+
+        const isUserRequester = reqDetail.requester_sub === user?.sub;
+        const isAdmin = user?.roles?.some((r: string) => ['admin', 'executive'].includes(r.toLowerCase())) || false;
+
         for (const slot of slots) {
           if (slot.status === 'PENDING') {
-            const normalizedReq: AccessRequest = {
-              id: reqDetail.id,
-              requester_sub: reqDetail.requester_sub,
-              requester_id: reqDetail.requester_sub,
-              requester_name: reqDetail.requester_sub,
-              resource_id: reqDetail.resource_id,
-              resource_name: reqDetail.resource_name || reqDetail.resource_id,
-              duration_minutes: reqDetail.duration_minutes,
-              duration_hours: Math.round(reqDetail.duration_minutes / 60) || 1,
-              purpose_code: reqDetail.purpose_code,
-              purpose_text: reqDetail.purpose_text,
-              purpose: reqDetail.purpose_code,
-              justification: reqDetail.purpose_text,
-              actions: reqDetail.actions || [],
-              risk_controls: reqDetail.risk_controls || [],
-              status: reqDetail.status,
-              created_at: reqDetail.created_at,
-              slots: slots.map((s, idx) => ({
-                id: s.id,
-                slot_index: idx,
-                slot_role: s.slot_role,
-                required_role: s.slot_role,
-                assigned_sub: s.assigned_sub,
-                status: s.status,
-                decision: s.decision,
-                rationale: s.rationale,
-                decision_rationale: s.rationale,
-                decided_by_sub: s.decided_by_sub,
-                decided_at: s.decided_at,
-              })),
-            };
+            const isAssigned = slot.assigned_sub === user?.sub;
+            const hasRole = user?.roles?.some((r: string) => r.toLowerCase() === slot.slot_role.toLowerCase()) || false;
 
-            items.push({
-              request: normalizedReq,
-              slot: {
-                id: slot.id,
-                slot_index: 0,
-                slot_role: slot.slot_role,
-                required_role: slot.slot_role,
-                assigned_sub: slot.assigned_sub,
-                status: slot.status,
-                rationale: slot.rationale,
-                decision_rationale: slot.rationale,
-              },
-            });
-            break; // next sequential pending slot
+            // Show slot if user is assigned, holds role (and not requester), or is admin
+            if ((isAssigned || hasRole || isAdmin) && (!isUserRequester || isAdmin)) {
+              items.push({
+                request: normalizedReq,
+                slot: {
+                  id: slot.id,
+                  slot_index: 0,
+                  slot_role: slot.slot_role,
+                  required_role: slot.slot_role,
+                  assigned_sub: slot.assigned_sub,
+                  status: slot.status,
+                  rationale: slot.rationale,
+                  decision_rationale: slot.rationale,
+                },
+              });
+            }
           }
         }
       }

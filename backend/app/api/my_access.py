@@ -315,8 +315,10 @@ def get_my_access_dashboard(
         for tr in team_requests_objs:
             res = db.get(Resource, tr.resource_id)
             requester_user = db.get(User, tr.requester_sub)
+            mgr_slot = next((s for s in tr.slots if s.slot_role == "manager" and s.status == "PENDING"), None)
             req_dict = {
                 "request_id": tr.id,
+                "slot_id": mgr_slot.id if mgr_slot else None,
                 "requester_sub": tr.requester_sub,
                 "requester_name": requester_user.display_name if requester_user else tr.requester_sub,
                 "requester_dept": requester_user.department if requester_user else "General",
@@ -326,6 +328,7 @@ def get_my_access_dashboard(
                 "purpose_text": tr.purpose_text,
                 "actions": tr.actions,
                 "duration_minutes": tr.duration_minutes,
+                "risk_controls": tr.risk_controls,
                 "status": tr.status,
                 "created_at": tr.created_at.isoformat(),
                 "slots": [
@@ -334,7 +337,7 @@ def get_my_access_dashboard(
                 ],
             }
             team_requests_list.append(req_dict)
-            if tr.status in ["IN_REVIEW", "BLOCKED"] and any(s.slot_role == "manager" and s.status == "PENDING" for s in tr.slots):
+            if tr.status in ["IN_REVIEW", "BLOCKED"] and mgr_slot is not None:
                 pending_team_approvals.append(req_dict)
 
         # Team member active access summary
@@ -394,15 +397,22 @@ def get_my_access_dashboard(
         for rr in risk_reqs:
             res = db.get(Resource, rr.resource_id)
             requester_user = db.get(User, rr.requester_sub)
+            risk_slot = next((s for s in rr.slots if s.slot_role == "risk_reviewer" and s.status == "PENDING"), None)
             risk_review_requests.append({
                 "request_id": rr.id,
+                "slot_id": risk_slot.id if risk_slot else None,
+                "requester_sub": rr.requester_sub,
                 "requester_name": requester_user.display_name if requester_user else rr.requester_sub,
+                "requester_dept": requester_user.department if requester_user else "General",
+                "resource_id": rr.resource_id,
                 "resource_name": res.name if res else rr.resource_id,
                 "resource_tier": res.tier if res else "INTERNAL_SYNTHETIC",
                 "is_crucial": bool(getattr(res, "is_crucial", False)),
                 "purpose_code": rr.purpose_code,
+                "purpose_text": rr.purpose_text,
                 "duration_minutes": rr.duration_minutes,
                 "actions": rr.actions,
+                "risk_controls": rr.risk_controls,
                 "created_at": rr.created_at.isoformat(),
             })
 
@@ -448,30 +458,39 @@ def get_my_access_dashboard(
         ]
         owned_ids = [r.id for r in owned_resources_objs]
 
-        # Requests for owned resources
-        ro_requests = db.execute(
-            select(AccessRequest).where(AccessRequest.resource_id.in_(owned_ids)).order_by(AccessRequest.created_at.desc()).limit(25)
-        ).scalars().all() if owned_ids else []
+        # Requests for owned resources or assigned resource owner slots
+        ro_requests_stmt = select(AccessRequest).where(
+            or_(
+                AccessRequest.resource_id.in_(owned_ids) if owned_ids else False,
+                AccessRequest.slots.any(and_(ReviewSlot.slot_role == "resource_owner", ReviewSlot.status == "PENDING")),
+            )
+        ).order_by(AccessRequest.created_at.desc()).limit(25)
+        ro_requests = db.execute(ro_requests_stmt).scalars().all()
 
         ro_requests_list = []
         pending_ro_approvals = []
         for ror in ro_requests:
             res = db.get(Resource, ror.resource_id)
             requester_user = db.get(User, ror.requester_sub)
+            ro_slot = next((s for s in ror.slots if s.slot_role == "resource_owner" and s.status == "PENDING"), None)
             req_dict = {
                 "request_id": ror.id,
+                "slot_id": ro_slot.id if ro_slot else None,
                 "requester_sub": ror.requester_sub,
                 "requester_name": requester_user.display_name if requester_user else ror.requester_sub,
+                "requester_dept": requester_user.department if requester_user else "General",
+                "resource_id": ror.resource_id,
                 "resource_name": res.name if res else ror.resource_id,
                 "purpose_code": ror.purpose_code,
                 "purpose_text": ror.purpose_text,
                 "actions": ror.actions,
                 "duration_minutes": ror.duration_minutes,
+                "risk_controls": ror.risk_controls,
                 "status": ror.status,
                 "created_at": ror.created_at.isoformat(),
             }
             ro_requests_list.append(req_dict)
-            if ror.status in ["IN_REVIEW", "BLOCKED"] and any(s.slot_role == "resource_owner" and s.status == "PENDING" for s in ror.slots):
+            if ror.status in ["IN_REVIEW", "BLOCKED"] and ro_slot is not None:
                 pending_ro_approvals.append(req_dict)
 
         # Active grants on owned resources

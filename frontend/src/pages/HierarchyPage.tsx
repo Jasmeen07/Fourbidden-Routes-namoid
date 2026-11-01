@@ -136,6 +136,119 @@ export const HierarchyPage: React.FC = () => {
     }
   };
 
+  // Direct In-Dashboard Decision Review Modal
+  const [reviewModal, setReviewModal] = useState<{
+    open: boolean;
+    requestId: string;
+    slotId: string;
+    slotRole: string;
+    requesterName: string;
+    requesterSub: string;
+    requesterDept: string;
+    resourceName: string;
+    purposeCode: string;
+    purposeText: string;
+    actions: string[];
+    durationMinutes: number;
+    decision: 'approve' | 'reject' | 'narrow';
+    rationale: string;
+    narrowedActions: string[];
+    narrowedMinutes: number;
+  }>({
+    open: false,
+    requestId: '',
+    slotId: '',
+    slotRole: '',
+    requesterName: '',
+    requesterSub: '',
+    requesterDept: '',
+    resourceName: '',
+    purposeCode: '',
+    purposeText: '',
+    actions: [],
+    durationMinutes: 1440,
+    decision: 'approve',
+    rationale: '',
+    narrowedActions: [],
+    narrowedMinutes: 1440,
+  });
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState<boolean>(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  const openReviewModal = async (reqItem: any, role: string) => {
+    setDecisionError(null);
+    let resolvedSlotId = reqItem.slot_id;
+
+    // If slot_id is not already on the item, fetch from /api/requests/:id
+    if (!resolvedSlotId) {
+      try {
+        const detail = await apiFetch(`/api/requests/${reqItem.request_id || reqItem.id}`);
+        const matchingSlot = detail.slots?.find((s: any) => s.slot_role === role && s.status === 'PENDING');
+        if (matchingSlot) resolvedSlotId = matchingSlot.id;
+      } catch (err) {
+        console.error('Failed to load request detail for slot id:', err);
+      }
+    }
+
+    setReviewModal({
+      open: true,
+      requestId: reqItem.request_id || reqItem.id,
+      slotId: resolvedSlotId || '',
+      slotRole: role,
+      requesterName: reqItem.requester_name || reqItem.requester_sub,
+      requesterSub: reqItem.requester_sub || '',
+      requesterDept: reqItem.requester_dept || 'Engineering',
+      resourceName: reqItem.resource_name || reqItem.resource_id,
+      purposeCode: reqItem.purpose_code || 'MODEL_EVALUATION',
+      purposeText: reqItem.purpose_text || 'Business access request',
+      actions: reqItem.actions || ['query'],
+      durationMinutes: reqItem.duration_minutes || 1440,
+      decision: 'approve',
+      rationale: '',
+      narrowedActions: reqItem.actions || ['query'],
+      narrowedMinutes: reqItem.duration_minutes || 1440,
+    });
+  };
+
+  const handleQuickDecisionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDecisionError(null);
+
+    if ((reviewModal.decision === 'reject' || reviewModal.decision === 'narrow') && !reviewModal.rationale.trim()) {
+      setDecisionError('A clear justification/rationale is strictly required when rejecting or narrowing scope.');
+      return;
+    }
+
+    setIsSubmittingDecision(true);
+    try {
+      const payload: any = {
+        slot_id: reviewModal.slotId,
+        decision: reviewModal.decision,
+        rationale: reviewModal.rationale.trim() || `Approved by ${reviewModal.slotRole}.`,
+      };
+
+      if (reviewModal.decision === 'narrow') {
+        payload.approved_limits = {
+          actions: reviewModal.narrowedActions.length > 0 ? reviewModal.narrowedActions : reviewModal.actions,
+          duration_minutes: reviewModal.narrowedMinutes || reviewModal.durationMinutes,
+        };
+      }
+
+      await apiFetch(`/api/requests/${reviewModal.requestId}/decisions`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      setReviewModal((prev) => ({ ...prev, open: false }));
+      setActionSuccess(`Decision recorded: Request ${reviewModal.requestId} ${reviewModal.decision.toUpperCase()} by ${reviewModal.slotRole}. Status updated.`);
+      await fetchDashboard();
+    } catch (err: any) {
+      setDecisionError(err.message || err.detail?.message || 'Failed to submit decision.');
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
   const profile = dashboardData?.user_profile;
   const empView = dashboardData?.employee_view;
   const mgrView = dashboardData?.manager_view;
@@ -844,7 +957,7 @@ export const HierarchyPage: React.FC = () => {
                             </td>
                             <td style={{ padding: '0.65rem 0.5rem' }}>
                               <button
-                                onClick={() => navigate('/reviews')}
+                                onClick={() => openReviewModal(req, 'manager')}
                                 className="btn btn-sm btn-primary"
                                 style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
                               >
@@ -947,11 +1060,11 @@ export const HierarchyPage: React.FC = () => {
                             </td>
                             <td style={{ padding: '0.65rem 0.5rem' }}>
                               <button
-                                onClick={() => navigate('/reviews')}
+                                onClick={() => openReviewModal(rr, 'risk_reviewer')}
                                 className="btn btn-sm btn-primary"
                                 style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem' }}
                               >
-                                Assess & Narrow
+                                Assess & Review
                               </button>
                             </td>
                           </tr>
@@ -1070,11 +1183,11 @@ export const HierarchyPage: React.FC = () => {
                             <td style={{ padding: '0.65rem 0.5rem' }}>{rq.status}</td>
                             <td style={{ padding: '0.65rem 0.5rem' }}>
                               <button
-                                onClick={() => navigate('/reviews')}
+                                onClick={() => openReviewModal(rq, 'resource_owner')}
                                 className="btn btn-sm btn-primary"
                                 style={{ fontSize: '0.72rem', padding: '0.2rem 0.45rem' }}
                               >
-                                Review
+                                Review Request
                               </button>
                             </td>
                           </tr>
@@ -1339,6 +1452,218 @@ export const HierarchyPage: React.FC = () => {
                 >
                   {isSubmittingRenew ? 'Submitting...' : 'Submit for 3-Stage Review'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Decision Review Modal */}
+      {reviewModal.open && (
+        <div className="modal-overlay" onClick={() => setReviewModal((prev) => ({ ...prev, open: false }))}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '640px', padding: '1.75rem', borderRadius: 'var(--radius-lg)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                  <span className="role-chip font-mono" style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>
+                    Stage: {reviewModal.slotRole}
+                  </span>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Record Multi-Party Governance Decision
+                  </h3>
+                </div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Request ID: <span className="font-mono">{reviewModal.requestId}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setReviewModal((prev) => ({ ...prev, open: false }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Request Summary Box */}
+            <div style={{
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.85rem',
+              marginBottom: '1.25rem',
+              fontSize: '0.8rem',
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Target Resource:</span>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{reviewModal.resourceName}</div>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Requester:</span>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{reviewModal.requesterName} ({reviewModal.requesterDept})</div>
+                </div>
+              </div>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Business Justification:</span>
+                <div style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>"{reviewModal.purposeText}"</div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Operations:</span>
+                {reviewModal.actions.map((act) => (
+                  <span key={act} className="badge font-mono" style={{ fontSize: '0.7rem' }}>{act}</span>
+                ))}
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: '0.5rem' }}>Duration:</span>
+                <span className="badge" style={{ fontSize: '0.7rem' }}>{Math.round(reviewModal.durationMinutes / 60)}h</span>
+              </div>
+            </div>
+
+            {decisionError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.65rem',
+                color: '#b91c1c',
+                fontSize: '0.78rem',
+                marginBottom: '1rem',
+              }}>
+                {decisionError}
+              </div>
+            )}
+
+            <form onSubmit={handleQuickDecisionSubmit}>
+              {/* Decision Choice */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
+                  Your Decision as {reviewModal.slotRole.replace('_', ' ').toUpperCase()}
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal((prev) => ({ ...prev, decision: 'approve' }))}
+                    className={`btn btn-sm ${reviewModal.decision === 'approve' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal((prev) => ({ ...prev, decision: 'narrow' }))}
+                    className={`btn btn-sm ${reviewModal.decision === 'narrow' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    ✂ Narrow Scope
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal((prev) => ({ ...prev, decision: 'reject' }))}
+                    className={`btn btn-sm ${reviewModal.decision === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    ✕ Reject
+                  </button>
+                </div>
+              </div>
+
+              {/* Scope Narrowing Options */}
+              {reviewModal.decision === 'narrow' && (
+                <div style={{
+                  padding: '0.75rem',
+                  background: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: '1rem',
+                  fontSize: '0.78rem',
+                }}>
+                  <div style={{ fontWeight: 700, color: '#92400e', marginBottom: '0.35rem' }}>
+                    Least-Privilege Scope Restriction:
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#92400e' }}>Permitted Actions:</span>
+                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem' }}>
+                      {reviewModal.actions.map((act) => (
+                        <label key={act} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={reviewModal.narrowedActions.includes(act)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setReviewModal((prev) => ({ ...prev, narrowedActions: [...prev.narrowedActions, act] }));
+                              } else {
+                                setReviewModal((prev) => ({ ...prev, narrowedActions: prev.narrowedActions.filter((a) => a !== act) }));
+                              }
+                            }}
+                          />
+                          <span className="font-mono">{act}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: '#92400e' }}>Max Duration (hours):</span>
+                    <select
+                      value={Math.round(reviewModal.narrowedMinutes / 60)}
+                      onChange={(e) => setReviewModal((prev) => ({ ...prev, narrowedMinutes: Number(e.target.value) * 60 }))}
+                      style={{ marginLeft: '0.5rem', padding: '0.2rem 0.4rem', fontSize: '0.75rem', borderRadius: '4px' }}
+                    >
+                      <option value={1}>1 hour</option>
+                      <option value={2}>2 hours</option>
+                      <option value={4}>4 hours</option>
+                      <option value={8}>8 hours</option>
+                      <option value={24}>24 hours</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Rationale / Comments input */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
+                  Decision Rationale & Governance Comments {reviewModal.decision !== 'approve' && <span style={{ color: '#b91c1c' }}>*</span>}
+                </label>
+                <textarea
+                  rows={3}
+                  required={reviewModal.decision !== 'approve'}
+                  placeholder={reviewModal.decision === 'approve' ? 'Optional sign-off notes...' : 'Explain the business, risk, or compliance reason...'}
+                  value={reviewModal.rationale}
+                  onChange={(e) => setReviewModal((prev) => ({ ...prev, rationale: e.target.value }))}
+                  style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewModal((prev) => ({ ...prev, open: false }));
+                    navigate('/reviews');
+                  }}
+                  className="btn btn-sm btn-secondary"
+                  style={{ fontSize: '0.75rem' }}
+                >
+                  Open in Full Review Queue &rarr;
+                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal((prev) => ({ ...prev, open: false }))}
+                    className="btn btn-sm btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingDecision}
+                    className="btn btn-sm btn-primary"
+                  >
+                    {isSubmittingDecision ? 'Submitting...' : `Confirm ${reviewModal.decision.toUpperCase()}`}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

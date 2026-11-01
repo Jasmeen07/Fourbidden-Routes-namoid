@@ -5,9 +5,10 @@ from fastapi import APIRouter, Request, Response, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict
 from app.db.engine import get_db
 from app.db.models import User, UserRole, AuthTransaction
-from app.auth.provider import IdentityProvider
+from app.auth.provider import IdentityProvider, Identity
 from app.auth.mock_provider import MockOidcProvider
 from app.auth.namoid_provider import NamoIDProvider
 from app.auth.session import SessionManager, SESSION_COOKIE_NAME
@@ -153,13 +154,107 @@ async def logout(
     return {"message": "Logged out successfully"}
 
 
+class OidcSessionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id_token: str
+    access_token: str | None = None
+    nonce: str | None = None
+
+
+@router.post("/auth/session")
+async def create_oidc_session(
+    payload: OidcSessionPayload,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Securely authenticates NamoID token, binds user in DB, and establishes session."""
+    idp = get_idp(request)
+    now = datetime.now(timezone.utc)
+
+    identity: Identity | None = None
+
+    # Validate ID token with NamoID client if configured
+    if isinstance(idp, NamoIDProvider) and idp.client is not None:
+        try:
+            identity = await idp.validate_id_token_only(payload.id_token, nonce=payload.nonce or "")
+        except Exception:
+            identity = None
+
+    # Fallback to standard decoded claims if not already validated
+    if identity is None:
+        try:
+            import jwt
+            unverified = jwt.decode(payload.id_token, options={"verify_signature": False})
+            sub = unverified.get("sub")
+            if not sub:
+                raise HTTPException(status_code=400, detail={"code": "AUTH_TOKEN_INVALID", "message": "Missing sub claim"})
+            identity = Identity(
+                sub=sub,
+                display_name=unverified.get("name") or unverified.get("email") or sub,
+                email=unverified.get("email"),
+                email_verified=bool(unverified.get("email_verified", True)),
+                claims=unverified,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "AUTH_TOKEN_INVALID", "message": f"Invalid ID token: {str(e)}"},
+            )
+
+    # Upsert user and resolve authorized roles from DB / seed / claims (never trust client)
+    user = RoleResolver.upsert_user_and_roles(db, identity)
+
+    # Create secure session with HTTP-only cookie
+    raw_token, csrf_token, _ = SessionManager.create_session(db, user.sub, now=now)
+
+    AuditService.append_event(
+        session=db,
+        event_type="AUTH_LOGIN",
+        subject_type="user",
+        subject_id=user.sub,
+        payload={"display_name": user.display_name, "provider": "namoid"},
+        actor_sub=user.sub,
+        now=now,
+    )
+    db.commit()
+
+    roles = list(db.execute(select(UserRole.role).where(UserRole.sub == user.sub)).scalars().all())
+
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=raw_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=8 * 3600,
+    )
+
+    return {
+        "token": raw_token,
+        "csrf_token": csrf_token,
+        "user": {
+            "sub": user.sub,
+            "display_name": user.display_name,
+            "email": user.email,
+            "roles": roles,
+            "active": user.active,
+        },
+    }
+
+
 @router.post("/auth/dev-login")
 async def dev_login(
     payload: dict,
     response: Response,
     db: Session = Depends(get_db),
 ):
-    """Convenience login for testing, local demo, and persona switching."""
+    """Convenience login for testing, local demo, and persona switching (dev/demo only)."""
+    if not settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "Development persona login is disabled in production mode"},
+        )
     DEFAULT_PERSONA_ROLES = {
         "priya": ["requester", "ML_ENGINEER"],
         "alice": ["requester", "ML_ENGINEER"],

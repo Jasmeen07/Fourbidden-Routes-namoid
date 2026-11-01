@@ -122,15 +122,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const displayName = auth.identity.name || auth.identity.email || sub;
       const email = auth.identity.email;
 
-      // Sync with backend session in memory
+      // Authenticate with backend session via real token validation endpoint
       try {
-        const res = await fetch('/auth/dev-login', {
+        const res = await fetch('/auth/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: sub,
-            display_name: displayName,
-            email: email,
+            id_token: auth.tokens.id_token,
+            access_token: auth.tokens.access_token,
+            nonce: (auth.idTokenClaims as any)?.nonce || '',
           }),
         });
 
@@ -140,20 +140,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCsrfToken(data.csrf_token);
           setUser(data.user);
         } else {
-          setUser({
-            sub,
-            display_name: displayName,
-            email,
-            roles: ['requester', 'ML_ENGINEER'],
-            active: true,
-          });
+          // Check if session already established
+          const meRes = await fetch('/api/me');
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            setUser({
+              sub: meData.sub,
+              display_name: meData.display_name,
+              email: meData.email,
+              roles: meData.roles || [],
+              active: meData.active,
+            });
+            setCsrfToken(meData.csrf_token);
+          } else {
+            setUser({
+              sub,
+              display_name: displayName,
+              email,
+              roles: ['requester'],
+              active: true,
+            });
+          }
         }
       } catch {
         setUser({
           sub,
           display_name: displayName,
           email,
-          roles: ['requester', 'ML_ENGINEER'],
+          roles: ['requester'],
           active: true,
         });
       }

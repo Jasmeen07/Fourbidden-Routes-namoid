@@ -17,16 +17,18 @@ class NamoIDProvider(IdentityProvider):
         client_id: str | None = None,
         client_secret: str | None = None,
         env: str = "test",
+        api_base_url: str = "https://api.namoid.in",
     ):
         self.client_id = client_id or os.environ.get("NAMOID_CLIENT_ID", "")
         self.client_secret = client_secret or os.environ.get("NAMOID_CLIENT_SECRET", "")
         self.env = env or os.environ.get("NAMOID_ENV", "test")
+        self.api_base_url = api_base_url or os.environ.get("NAMOID_API_BASE_URL", "https://api.namoid.in")
 
         if AsyncNamoIDClient is not None and self.client_id:
             self.client = AsyncNamoIDClient(
                 client_id=self.client_id,
                 client_secret=self.client_secret,
-                environment=self.env,
+                api_base_url=self.api_base_url,
             )
         else:
             self.client = None
@@ -35,8 +37,8 @@ class NamoIDProvider(IdentityProvider):
         if self.client is None:
             raise DomainError("NamoID client not configured", code="AUTH_FAILURE", status_code=500)
 
-        tx = await self.client.create_oidc_transaction(redirect_uri=redirect_uri)
-        auth_url = self.client.authorization_url(tx)
+        tx = self.client.create_oidc_transaction(redirect_uri=redirect_uri)
+        auth_url = await self.client.authorization_url(tx)
 
         return LoginTransaction(
             state=tx.state,
@@ -64,7 +66,7 @@ class NamoIDProvider(IdentityProvider):
             )
             id_claims = await self.client.validate_id_token(
                 id_token=tokens.id_token,
-                expected_nonce=stored_nonce,
+                nonce=stored_nonce,
             )
             userinfo = await self.client.user_info(access_token=tokens.access_token)
 
@@ -82,9 +84,29 @@ class NamoIDProvider(IdentityProvider):
         except Exception as e:
             raise DomainError(f"NamoID authentication failed: {str(e)}", code="AUTH_TOKEN_INVALID", status_code=400)
 
+    async def validate_id_token_only(self, id_token: str, nonce: str = "") -> Identity:
+        """Validates an ID token and returns the authenticated Identity."""
+        if self.client is None:
+            raise DomainError("NamoID client not configured", code="AUTH_FAILURE", status_code=500)
+
+        id_claims = await self.client.validate_id_token(
+            id_token=id_token,
+            nonce=nonce,
+        )
+        return Identity(
+            sub=id_claims["sub"],
+            display_name=id_claims.get("name", id_claims.get("email", "User")),
+            email=id_claims.get("email"),
+            email_verified=bool(id_claims.get("email_verified", False)),
+            claims=dict(id_claims),
+        )
+
     async def get_logout_url(self, post_logout_redirect_uri: str) -> str:
         if self.client is not None and hasattr(self.client, "logout_url"):
-            return self.client.logout_url(post_logout_redirect_uri=post_logout_redirect_uri)
+            try:
+                return await self.client.logout_url(id_token_hint="", post_logout_redirect_uri=post_logout_redirect_uri)
+            except Exception:
+                return "/"
         return "/"
 
     async def revoke_tokens(self, token: str) -> None:

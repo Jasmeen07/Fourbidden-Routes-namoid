@@ -62,12 +62,12 @@ def check_sod_and_eligibility(
 
     # Role specific assignments
     if slot.slot_role == "manager":
-        if request.requester_manager_sub and candidate.sub != request.requester_manager_sub:
+        if request.requester_manager_sub and candidate.sub != request.requester_manager_sub and candidate.sub != slot.assigned_sub:
             raise NotAssignedError(
                 f"User {candidate.sub} is not the designated manager for requester {request.requester_sub}"
             )
     elif slot.slot_role == "resource_owner":
-        if candidate.sub != request.resource_owner_sub:
+        if candidate.sub != request.resource_owner_sub and candidate.sub != slot.assigned_sub:
             raise NotAssignedError(
                 f"User {candidate.sub} is not the owner of resource {request.resource_id}"
             )
