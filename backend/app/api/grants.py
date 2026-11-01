@@ -33,16 +33,18 @@ def list_grants(
     clock = getattr(request.app.state, "clock", None)
     now = clock.now() if clock else datetime.now(timezone.utc)
 
+    is_privileged = any(r.lower() in ("admin", "executive", "compliance", "security_admin", "data_governance", "risk_reviewer") for r in user.roles)
     stmt = select(Grant).order_by(Grant.activated_at.desc())
     if scope == "mine":
         stmt = stmt.where(Grant.requester_sub == user.sub)
-    elif scope == "visible":
-        stmt = stmt.outerjoin(Resource, Grant.resource_id == Resource.id).where(
-            or_(
-                Grant.requester_sub == user.sub,
-                Resource.owner_sub == user.sub,
+    elif scope in ("visible", "all"):
+        if not is_privileged:
+            stmt = stmt.outerjoin(Resource, Grant.resource_id == Resource.id).where(
+                or_(
+                    Grant.requester_sub == user.sub,
+                    Resource.owner_sub == user.sub,
+                )
             )
-        )
 
     all_grants = db.execute(stmt).scalars().all()
     results = []

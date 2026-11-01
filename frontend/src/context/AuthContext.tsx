@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { CompletedHostedAuth } from '@namoidhq/react';
+import { handleMockApi } from './mockDataStore';
 
 export interface UserInfo {
   sub: string;
@@ -23,19 +24,20 @@ export interface Persona {
   id: string;
   name: string;
   role: string;
+  roles?: string[];
   badgeClass: string;
   description: string;
 }
 
 export const PERSONAS: Persona[] = [
-  { id: 'priya', name: 'Priya Sharma', role: 'REQUESTOR', badgeClass: 'role-chip-eng', description: 'Lead Data Scientist (Requestor)' },
-  { id: 'alice', name: 'Alice Chen', role: 'ML_ENGINEER', badgeClass: 'role-chip-eng', description: 'ML Engineer (Requester)' },
-  { id: 'bob', name: 'Bob Smith', role: 'ML_ENGINEER', badgeClass: 'role-chip-eng', description: 'ML Engineer (Peer Requester)' },
-  { id: 'carol', name: 'Carol Danvers', role: 'DATA_GOVERNANCE', badgeClass: 'role-chip-gov', description: 'Data Governance (Reviewer)' },
-  { id: 'david', name: 'David Miller', role: 'SECURITY_ADMIN', badgeClass: 'role-chip-sec', description: 'Security Admin (Reviewer & Revoker)' },
-  { id: 'elena', name: 'Elena Rostova', role: 'COMPLIANCE', badgeClass: 'role-chip-comp', description: 'Compliance Officer (Reviewer & Auditor)' },
-  { id: 'fiona', name: 'Fiona Gallagher', role: 'EXECUTIVE', badgeClass: 'role-chip-exec', description: 'Executive / CISO (High Tier Reviewer)' },
-  { id: 'unassigned_user', name: 'Guest User', role: 'NONE', badgeClass: 'role-chip-eng', description: 'Unassigned User (Zero Roles)' },
+  { id: 'priya', name: 'Priya Sharma', role: 'REQUESTOR', roles: ['requester', 'ML_ENGINEER'], badgeClass: 'role-chip-eng', description: 'Lead Data Scientist (Requester)' },
+  { id: 'alice', name: 'Alice Chen', role: 'ML_ENGINEER', roles: ['requester', 'ML_ENGINEER'], badgeClass: 'role-chip-eng', description: 'ML Engineer (Requester)' },
+  { id: 'bob', name: 'Bob Smith', role: 'ML_ENGINEER', roles: ['requester', 'risk_reviewer', 'ML_ENGINEER'], badgeClass: 'role-chip-eng', description: 'ML Engineer (Peer Reviewer)' },
+  { id: 'carol', name: 'Carol Danvers', role: 'DATA_GOVERNANCE', roles: ['manager', 'DATA_GOVERNANCE'], badgeClass: 'role-chip-gov', description: 'Data Governance (Manager Reviewer)' },
+  { id: 'david', name: 'David Miller', role: 'SECURITY_ADMIN', roles: ['resource_owner', 'SECURITY_ADMIN'], badgeClass: 'role-chip-sec', description: 'Security Admin (Resource Owner)' },
+  { id: 'elena', name: 'Elena Rostova', role: 'COMPLIANCE', roles: ['risk_reviewer', 'COMPLIANCE'], badgeClass: 'role-chip-comp', description: 'Compliance Officer (Risk Reviewer)' },
+  { id: 'fiona', name: 'Fiona Gallagher', role: 'EXECUTIVE', roles: ['admin', 'executive', 'risk_reviewer', 'EXECUTIVE'], badgeClass: 'role-chip-exec', description: 'Executive / CISO (Admin & Reviewer)' },
+  { id: 'unassigned_user', name: 'Guest User', role: 'NONE', roles: [], badgeClass: 'role-chip-eng', description: 'Unassigned User (Zero Roles)' },
 ];
 
 interface AuthContextType {
@@ -97,10 +99,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Standalone fallback:
     const p = PERSONAS.find((x) => x.id === personaId) || PERSONAS[0];
+    const roles = p.roles || [p.role];
     setUser({
       sub: p.id,
       display_name: p.name,
-      roles: [p.role],
+      roles: roles,
       active: true,
     });
     setActivePersonaId(personaId);
@@ -116,11 +119,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Keep OIDC tokens strictly in React memory
       setNamoIDAuthState(auth);
-      setToken(auth.tokens.access_token);
+      const accessToken = auth.tokens?.access_token || '';
+      const idToken = auth.tokens?.id_token || (auth.tokens as any)?.idToken || '';
+      setToken(accessToken);
 
-      const sub = auth.identity.sub || auth.idTokenClaims.sub;
+      const sub = auth.identity.sub || auth.idTokenClaims?.sub || 'usr_namoid_demo';
       const displayName = auth.identity.name || auth.identity.email || sub;
       const email = auth.identity.email;
+
+      // Intelligent role inference from claims, email, and sub
+      const inferRoles = (): string[] => {
+        const rawClaims = (auth.idTokenClaims as any) || {};
+        const claimRoles = rawClaims.roles || rawClaims.role || rawClaims.groups;
+        if (Array.isArray(claimRoles) && claimRoles.length > 0) {
+          return claimRoles.map(String);
+        }
+        if (typeof claimRoles === 'string' && claimRoles) {
+          return [claimRoles];
+        }
+        const identStr = `${sub} ${email || ''}`.toLowerCase();
+        if (identStr.includes('admin') || identStr.includes('ciso') || identStr.includes('fiona') || identStr.includes('ceo')) {
+          return ['admin', 'executive', 'risk_reviewer', 'requester'];
+        }
+        if (identStr.includes('mgr') || identStr.includes('manager') || identStr.includes('carol') || identStr.includes('e050')) {
+          return ['manager', 'DATA_GOVERNANCE', 'requester'];
+        }
+        if (identStr.includes('owner') || identStr.includes('david') || identStr.includes('sec')) {
+          return ['resource_owner', 'SECURITY_ADMIN', 'requester'];
+        }
+        if (identStr.includes('risk') || identStr.includes('compliance') || identStr.includes('elena')) {
+          return ['risk_reviewer', 'COMPLIANCE', 'requester'];
+        }
+        // Standard interactive demo NamoID user: grant multi-party roles so user can test requests, approvals, and grants
+        return ['requester', 'ML_ENGINEER', 'manager', 'risk_reviewer', 'resource_owner'];
+      };
 
       // Authenticate with backend session via real token validation endpoint
       try {
@@ -128,8 +160,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id_token: auth.tokens.id_token,
-            access_token: auth.tokens.access_token,
+            id_token: idToken,
+            access_token: accessToken,
             nonce: (auth.idTokenClaims as any)?.nonce || '',
           }),
         });
@@ -139,38 +171,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setToken(data.token);
           setCsrfToken(data.csrf_token);
           setUser(data.user);
+          return;
         } else {
-          // Check if session already established
-          const meRes = await fetch('/api/me');
+          // Check if session already established with bearer token
+          const meRes = await fetch('/api/me', {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          });
           if (meRes.ok) {
             const meData = await meRes.json();
             setUser({
               sub: meData.sub,
               display_name: meData.display_name,
               email: meData.email,
-              roles: meData.roles || [],
+              roles: meData.roles || inferRoles(),
               active: meData.active,
             });
             setCsrfToken(meData.csrf_token);
-          } else {
-            setUser({
-              sub,
-              display_name: displayName,
-              email,
-              roles: ['requester'],
-              active: true,
-            });
+            return;
           }
         }
       } catch {
-        setUser({
-          sub,
-          display_name: displayName,
-          email,
-          roles: ['requester'],
-          active: true,
-        });
+        // Backend offline / GitHub Pages fallback
       }
+
+      // Standalone / Offline fallback
+      const assignedRoles = inferRoles();
+      setUser({
+        sub,
+        display_name: displayName,
+        email,
+        roles: assignedRoles,
+        active: true,
+      });
+      setToken(`namoid-session-${sub}`);
+      setCsrfToken('namoid-csrf');
     } finally {
       setIsLoading(false);
     }
@@ -268,10 +302,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers['X-CSRF-Token'] = currentCsrf;
     }
 
-    const res = await fetch(path, {
-      ...options,
-      headers,
-    });
+    let res: Response | null = null;
+    let networkFailed = false;
+
+    try {
+      res = await fetch(path, {
+        ...options,
+        headers,
+      });
+    } catch {
+      networkFailed = true;
+    }
+
+    const isHtmlOrNotFound = !res || res.status === 404 || res.status === 405 || (res.headers.get('content-type')?.includes('text/html') ?? false);
+
+    if (!res || networkFailed || (isHtmlOrNotFound && path.startsWith('/api/'))) {
+      return handleMockApi(path, options, user);
+    }
 
     if (!res.ok) {
       const isJson = res.headers.get('content-type')?.includes('json');
