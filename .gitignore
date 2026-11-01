@@ -19,4 +19,6 @@ dist/
 backend/.venv/
 coverage/
 htmlcov/
+.vite/
+frontend/.vite/
 

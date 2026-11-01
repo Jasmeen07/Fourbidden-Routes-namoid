@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Literal
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.db.models import AccessRequest, ReviewSlot, Grant, User, UserRole, Resource
+from app.db.models import AccessRequest, ReviewSlot, Grant, User, UserRole, Resource, Notification
 from app.services.audit import AuditService
 from app.domain.limits import Limits, validate_narrowing, merge_limits
 from app.domain.sod import check_sod_and_eligibility, Subject, RequestContext, SlotContext
@@ -190,6 +190,21 @@ class ReviewsService:
                     s.status = SlotStatus.CANCELLED.value
 
             db.flush()
+            # Notify requester of rejection with who rejected and why
+            res = db.get(Resource, request.resource_id)
+            res_name = res.name if res else request.resource_id
+            rev_user = db.get(User, reviewer_sub)
+            rev_name = rev_user.display_name if rev_user else reviewer_sub
+            rejection_notif = Notification(
+                id=generate_id("notif"),
+                to_sub=request.requester_sub,
+                kind="REQUEST_REJECTED",
+                ref_id=request.id,
+                message=f"Access request {request.id[:10]} for {res_name} was REJECTED by {rev_name} ({slot.slot_role}). Rationale: '{rationale or 'Policy criteria not met'}'",
+                created_at=current_time,
+            )
+            db.add(rejection_notif)
+
             AuditService.append_event(
                 session=db,
                 event_type="REQUEST_REJECTED",
@@ -270,6 +285,27 @@ class ReviewsService:
                 )
                 db.add(created_grant)
                 db.flush()
+
+                # Build detailed decision summary of who accepted and why
+                summary_lines = []
+                for s in request.slots:
+                    dec_user = db.get(User, s.decided_by_sub) if s.decided_by_sub else None
+                    name = dec_user.display_name if dec_user else (s.decided_by_sub or s.assigned_sub)
+                    summary_lines.append(f"• {name} ({s.slot_role}): {s.decision} — '{s.rationale or 'Approved under policy controls'}'")
+
+                res = db.get(Resource, request.resource_id)
+                res_name = res.name if res else request.resource_id
+                approval_summary = "\n".join(summary_lines)
+
+                approval_notif = Notification(
+                    id=generate_id("notif"),
+                    to_sub=request.requester_sub,
+                    kind="REQUEST_APPROVED",
+                    ref_id=created_grant.id,
+                    message=f"Access request {request.id[:10]} for {res_name} was APPROVED!\n\nReviewer Summary:\n{approval_summary}",
+                    created_at=current_time,
+                )
+                db.add(approval_notif)
 
                 AuditService.append_event(
                     session=db,

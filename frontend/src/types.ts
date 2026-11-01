@@ -424,3 +424,28 @@ export interface SecOpsSummary {
     created_at: string;
   }[];
 }
+
+export interface NotificationSlotSummary {
+  slot_role: string;
+  reviewer_name: string;
+  reviewer_sub: string;
+  decision: 'APPROVED' | 'NARROWED' | 'REJECTED' | 'PENDING';
+  rationale: string;
+  decided_at?: string;
+}
+
+export interface GovernanceNotification {
+  id: string;
+  to_sub: string;
+  kind: 'REQUEST_APPROVED' | 'REQUEST_REJECTED' | 'SECURITY_ALERT' | 'INFO';
+  ref_id: string;
+  request_id?: string;
+  grant_id?: string;
+  resource_name?: string;
+  title?: string;
+  message: string;
+  summary_breakdown?: NotificationSlotSummary[];
+  created_at: string;
+  read: boolean;
+}
+

@@ -364,6 +364,116 @@ export const RequestsListPage: React.FC = () => {
                   </div>
                 )}
 
+                {/* Decision Summary Card: Who accepted, who rejected, and why */}
+                {(isApproved || isRejected) && (
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.85rem 1rem',
+                      marginTop: '0.5rem',
+                      marginBottom: '0.85rem',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '0.6rem',
+                        borderBottom: '1px solid #f1f5f9',
+                        paddingBottom: '0.4rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span
+                          style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 750,
+                            color: 'var(--text-primary)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          Governance Decision Summary
+                        </span>
+                        <span className={`badge ${isApproved ? 'badge-active' : 'badge-revoked'}`} style={{ fontSize: '0.68rem' }}>
+                          {isApproved ? 'All Reviewers Approved' : 'Rejected By Governance'}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Separation of Duties (SG-1) Enforced
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {slots.map((s, idx) => {
+                        const isSlotApp = s.status === 'APPROVED';
+                        const isSlotNar = s.status === 'NARROWED';
+                        const isSlotRej = s.status === 'REJECTED';
+                        const reviewerPersona = personas.find((p) => p.id === (s.decided_by_sub || s.assigned_sub));
+                        const reviewerName = reviewerPersona?.name || s.decided_by_sub || s.assigned_sub;
+
+                        return (
+                          <div
+                            key={s.id || idx}
+                            style={{
+                              padding: '0.55rem 0.75rem',
+                              background: isSlotRej ? '#fff5f5' : isSlotNar ? '#fffbeb' : '#f8fafc',
+                              border: `1px solid ${isSlotRej ? '#fecaca' : isSlotNar ? '#fde68a' : '#e2e8f0'}`,
+                              borderLeft: `4px solid ${isSlotRej ? '#dc2626' : isSlotNar ? '#d97706' : '#059669'}`,
+                              borderRadius: 'var(--radius-sm)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '0.5rem',
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: '220px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                                  {reviewerName}
+                                </strong>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                  ({s.slot_role.toUpperCase()})
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: '0.78rem',
+                                  color: isSlotRej ? '#991b1b' : 'var(--text-secondary)',
+                                  marginTop: '0.2rem',
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                <strong>Rationale:</strong> "{s.rationale || (isSlotApp ? 'Approved under governance criteria' : 'Policy criteria not met')}"
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {isSlotNar && s.approved_limits && (
+                                <span className="badge" style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.68rem' }}>
+                                  {s.approved_limits.duration_minutes ? `Duration capped to ${s.approved_limits.duration_minutes}m` : 'Limits narrowed'}
+                                </span>
+                              )}
+                              <span
+                                className={`badge ${isSlotApp ? 'badge-active' : isSlotNar ? 'badge-tier-sensitive' : 'badge-revoked'}`}
+                                style={{ fontSize: '0.72rem', fontWeight: 700 }}
+                              >
+                                {s.status}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+
                 {/* Multi-Slot Review Hierarchy Stepper */}
                 {slots.length > 0 && (
                   <div style={{ marginTop: '0.75rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>

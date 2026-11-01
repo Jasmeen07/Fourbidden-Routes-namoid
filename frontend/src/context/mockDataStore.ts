@@ -1,8 +1,9 @@
-import { AccessRequest, Grant, Resource } from '../types';
+import { AccessRequest, Grant, Resource, GovernanceNotification, NotificationSlotSummary } from '../types';
 import type { UserInfo } from './AuthContext';
 
 const STORAGE_KEY_REQUESTS = 'gg_mock_requests';
 const STORAGE_KEY_GRANTS = 'gg_mock_grants';
+const STORAGE_KEY_NOTIFICATIONS = 'gg_mock_notifications';
 
 export const INITIAL_RESOURCES: Resource[] = [
   {
@@ -191,6 +192,113 @@ export const INITIAL_REQUESTS: AccessRequest[] = [
       },
     ],
   },
+  {
+    id: 'req_priya_claims_approved',
+    requester_sub: 'priya',
+    requester_id: 'priya',
+    requester_name: 'Priya Sharma',
+    requester_dept: 'Risk Operations',
+    resource_id: 'D-claims-synth',
+    resource_name: 'Synthetic Insurance Claims Dataset',
+    resource_tier: 'RESTRICTED_SYNTHETIC',
+    purpose_code: 'FRAUD_RULE_TUNING',
+    purpose_text: 'Evaluating claims classifier accuracy on synthetic data.',
+    actions: ['read_sample'],
+    duration_minutes: 1440,
+    duration_hours: 24,
+    risk_controls: ['activity_logging', 'synthetic_data_only', 'isolated_workspace'],
+    status: 'APPROVED',
+    created_at: new Date(Date.now() - 3600000 * 6).toISOString(),
+    slots: [
+      {
+        id: 'slot_priya_mgr_01',
+        slot_index: 0,
+        slot_role: 'manager',
+        assigned_sub: 'carol',
+        status: 'APPROVED',
+        decision: 'APPROVE',
+        rationale: 'Approved for fraud detection benchmarking in isolated workspace.',
+        decided_by_sub: 'carol',
+        decided_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+      },
+      {
+        id: 'slot_priya_own_01',
+        slot_index: 1,
+        slot_role: 'resource_owner',
+        assigned_sub: 'david',
+        status: 'APPROVED',
+        decision: 'APPROVE',
+        rationale: 'Synthetic claims dataset sample read parameters verified.',
+        decided_by_sub: 'david',
+        decided_at: new Date(Date.now() - 3600000 * 4.5).toISOString(),
+      },
+      {
+        id: 'slot_priya_rsk_01',
+        slot_index: 2,
+        slot_role: 'risk_reviewer',
+        assigned_sub: 'elena',
+        status: 'NARROWED',
+        decision: 'NARROW',
+        rationale: 'Approved with duration capped at 24h and activity logging enforced (SG-6).',
+        approved_limits: { duration_minutes: 1440, actions: ['read_sample'] },
+        decided_by_sub: 'elena',
+        decided_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      },
+    ],
+  },
+  {
+    id: 'req_priya_credit_rejected',
+    requester_sub: 'priya',
+    requester_id: 'priya',
+    requester_name: 'Priya Sharma',
+    requester_dept: 'Customer Intelligence',
+    resource_id: 'M-credit-risk-v2',
+    resource_name: 'Credit Risk Scoring Model',
+    resource_tier: 'TIER_1_CRITICAL',
+    purpose_code: 'MODEL_EVALUATION',
+    purpose_text: 'Model bias audit and quarterly scoring benchmark.',
+    actions: ['query'],
+    duration_minutes: 720,
+    duration_hours: 12,
+    risk_controls: ['activity_logging', 'output_filtering'],
+    status: 'REJECTED',
+    created_at: new Date(Date.now() - 3600000 * 10).toISOString(),
+    slots: [
+      {
+        id: 'slot_priya_rej_mgr',
+        slot_index: 0,
+        slot_role: 'manager',
+        assigned_sub: 'carol',
+        status: 'APPROVED',
+        decision: 'APPROVE',
+        rationale: 'Business justification confirmed for quarterly risk modeling.',
+        decided_by_sub: 'carol',
+        decided_at: new Date(Date.now() - 3600000 * 9).toISOString(),
+      },
+      {
+        id: 'slot_priya_rej_own',
+        slot_index: 1,
+        slot_role: 'resource_owner',
+        assigned_sub: 'david',
+        status: 'APPROVED',
+        decision: 'APPROVE',
+        rationale: 'Model query endpoint available.',
+        decided_by_sub: 'david',
+        decided_at: new Date(Date.now() - 3600000 * 8.5).toISOString(),
+      },
+      {
+        id: 'slot_priya_rej_rsk',
+        slot_index: 2,
+        slot_role: 'risk_reviewer',
+        assigned_sub: 'elena',
+        status: 'REJECTED',
+        decision: 'REJECT',
+        rationale: 'Tier-1 critical model export violates SG-2 cross-tier policy without hardware containment.',
+        decided_by_sub: 'elena',
+        decided_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+      },
+    ],
+  },
 ];
 
 export const INITIAL_GRANTS: Grant[] = [
@@ -234,6 +342,99 @@ export const INITIAL_GRANTS: Grant[] = [
   },
 ];
 
+export const INITIAL_NOTIFICATIONS: GovernanceNotification[] = [
+  {
+    id: 'notif_001',
+    to_sub: 'priya',
+    kind: 'REQUEST_APPROVED',
+    ref_id: 'grant_claims_priya_02',
+    request_id: 'req_priya_claims_approved',
+    grant_id: 'grant_claims_priya_02',
+    resource_name: 'Synthetic Insurance Claims Dataset',
+    title: 'Access Request Approved',
+    message: 'Access request req_priya_claims for Synthetic Insurance Claims Dataset was APPROVED by all reviewers! An active grant is now enforced.',
+    summary_breakdown: [
+      {
+        slot_role: 'Manager',
+        reviewer_name: 'Carol Danvers',
+        reviewer_sub: 'carol',
+        decision: 'APPROVED',
+        rationale: 'Approved for fraud detection benchmarking in isolated workspace.',
+        decided_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+      },
+      {
+        slot_role: 'Resource Owner',
+        reviewer_name: 'David Miller',
+        reviewer_sub: 'david',
+        decision: 'APPROVED',
+        rationale: 'Synthetic claims dataset sample read parameters verified.',
+        decided_at: new Date(Date.now() - 3600000 * 4.5).toISOString(),
+      },
+      {
+        slot_role: 'Risk Reviewer',
+        reviewer_name: 'Elena Rostova',
+        reviewer_sub: 'elena',
+        decision: 'NARROWED',
+        rationale: 'Approved with duration capped at 24h and activity logging enforced (SG-6).',
+        decided_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      },
+    ],
+    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+    read: false,
+  },
+  {
+    id: 'notif_002',
+    to_sub: 'priya',
+    kind: 'REQUEST_REJECTED',
+    ref_id: 'req_priya_credit_rejected',
+    request_id: 'req_priya_credit_rejected',
+    resource_name: 'Credit Risk Scoring Model',
+    title: 'Access Request Rejected',
+    message: 'Access request req_priya_credit for Credit Risk Scoring Model was REJECTED by Elena Rostova (Risk Reviewer).',
+    summary_breakdown: [
+      {
+        slot_role: 'Manager',
+        reviewer_name: 'Carol Danvers',
+        reviewer_sub: 'carol',
+        decision: 'APPROVED',
+        rationale: 'Business justification confirmed for quarterly risk modeling.',
+        decided_at: new Date(Date.now() - 3600000 * 9).toISOString(),
+      },
+      {
+        slot_role: 'Resource Owner',
+        reviewer_name: 'David Miller',
+        reviewer_sub: 'david',
+        decision: 'APPROVED',
+        rationale: 'Model query endpoint available.',
+        decided_at: new Date(Date.now() - 3600000 * 8.5).toISOString(),
+      },
+      {
+        slot_role: 'Risk Reviewer',
+        reviewer_name: 'Elena Rostova',
+        reviewer_sub: 'elena',
+        decision: 'REJECTED',
+        rationale: 'Tier-1 critical model export violates SG-2 cross-tier policy without hardware containment.',
+        decided_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+      },
+    ],
+    created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+    read: false,
+  },
+  {
+    id: 'notif_003',
+    to_sub: 'priya',
+    kind: 'SECURITY_ALERT',
+    ref_id: 'audit_event_join_block',
+    resource_name: 'Employee Records → Salary Records',
+    title: 'Security Alert: Join Blocked',
+    message: 'Blocked join attempt on Employee Records → Salary Records under SG-2 separation rule.',
+    summary_breakdown: [],
+    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+    read: true,
+  },
+];
+
+
 function getStoredRequests(): AccessRequest[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_REQUESTS);
@@ -265,6 +466,23 @@ function saveStoredGrants(grants: Grant[]) {
     localStorage.setItem(STORAGE_KEY_GRANTS, JSON.stringify(grants));
   } catch {}
 }
+
+function getStoredNotifications(): GovernanceNotification[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Fall back to initial
+  }
+  return INITIAL_NOTIFICATIONS;
+}
+
+function saveStoredNotifications(notifs: GovernanceNotification[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(notifs));
+  } catch {}
+}
+
 
 export function handleMockApi(path: string, options: RequestInit = {}, currentUser?: UserInfo | null): any {
   const method = (options.method || 'GET').toUpperCase();
@@ -404,6 +622,38 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
 
       if (anyRejected) {
         req.status = 'REJECTED';
+
+        // Notify requester of rejection with reviewer breakdown
+        const rejectingSlot = req.slots.find((s) => s.status === 'REJECTED');
+        const revName = currentUser?.display_name || currentUser?.sub || rejectingSlot?.assigned_sub || 'Reviewer';
+        const notifs = getStoredNotifications();
+        const breakdown: NotificationSlotSummary[] = req.slots.map((s) => ({
+          slot_role: s.slot_role,
+          reviewer_name:
+            s.decided_by_sub && currentUser && s.decided_by_sub === currentUser.sub
+              ? (currentUser.display_name || currentUser.sub)
+              : s.decided_by_sub || s.assigned_sub || 'Assigned Reviewer',
+          reviewer_sub: s.decided_by_sub || s.assigned_sub || 'reviewer',
+          decision: (s.status as any) || 'PENDING',
+          rationale: s.rationale || 'Pending review',
+          decided_at: s.decided_at,
+        }));
+
+
+        notifs.unshift({
+          id: `notif_${Date.now().toString(36)}`,
+          to_sub: req.requester_sub,
+          kind: 'REQUEST_REJECTED',
+          ref_id: req.id,
+          request_id: req.id,
+          resource_name: req.resource_name || req.resource_id,
+          title: `Access Request Rejected`,
+          message: `Access request ${req.id.slice(0, 10)} for ${req.resource_name || req.resource_id} was REJECTED by ${revName} (${rejectingSlot?.slot_role}). Rationale: "${rejectingSlot?.rationale || 'Policy criteria not met'}"`,
+          summary_breakdown: breakdown,
+          created_at: new Date().toISOString(),
+          read: false,
+        });
+        saveStoredNotifications(notifs);
       } else if (allApproved) {
         req.status = 'APPROVED';
 
@@ -450,7 +700,39 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
           grants.unshift(newGrant);
         }
         saveStoredGrants(grants);
+
+        // Notify requester of approval with full summary breakdown
+        const notifs = getStoredNotifications();
+        const breakdown: NotificationSlotSummary[] = req.slots.map((s) => ({
+          slot_role: s.slot_role,
+          reviewer_name:
+            s.decided_by_sub && currentUser && s.decided_by_sub === currentUser.sub
+              ? (currentUser.display_name || currentUser.sub)
+              : s.decided_by_sub || s.assigned_sub || 'Assigned Reviewer',
+          reviewer_sub: s.decided_by_sub || s.assigned_sub || 'reviewer',
+          decision: (s.status as any) || 'APPROVED',
+          rationale: s.rationale || 'Approved under multi-party governance controls',
+          decided_at: s.decided_at,
+        }));
+
+
+        notifs.unshift({
+          id: `notif_${Date.now().toString(36)}`,
+          to_sub: req.requester_sub,
+          kind: 'REQUEST_APPROVED',
+          ref_id: newGrant.id,
+          request_id: req.id,
+          grant_id: newGrant.id,
+          resource_name: req.resource_name || req.resource_id,
+          title: `Access Request Approved`,
+          message: `Access request ${req.id.slice(0, 10)} for ${req.resource_name || req.resource_id} was APPROVED by all reviewers! An active grant is now enforced.`,
+          summary_breakdown: breakdown,
+          created_at: new Date().toISOString(),
+          read: false,
+        });
+        saveStoredNotifications(notifs);
       }
+
 
       requests[reqIdx] = req;
       saveStoredRequests(requests);
@@ -570,6 +852,45 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     };
   }
 
+  // 12. Notifications list
+  if (pathname === '/api/notifications' && method === 'GET') {
+    const notifs = getStoredNotifications();
+    const sub = currentUser?.sub || 'priya';
+    const roles = (currentUser?.roles || []).map((r: string) => r.toLowerCase());
+    const isPrivileged = roles.some((r: string) =>
+      ['admin', 'executive', 'compliance', 'security_admin'].includes(r)
+    );
+
+    return notifs.filter((n) => isPrivileged || n.to_sub === sub);
+  }
+
+  // 13. Mark notification as read
+  if (pathname.includes('/api/notifications/') && pathname.endsWith('/read') && method === 'POST') {
+    const parts = pathname.split('/');
+    const notifId = parts[3];
+    const notifs = getStoredNotifications();
+    const target = notifs.find((n) => n.id === notifId);
+    if (target) {
+      target.read = true;
+      saveStoredNotifications(notifs);
+    }
+    return { success: true };
+  }
+
+  // 14. Mark all notifications as read / clear
+  if ((pathname === '/api/notifications/clear' || pathname === '/api/notifications/mark-all-read') && method === 'POST') {
+    const notifs = getStoredNotifications();
+    const sub = currentUser?.sub || 'priya';
+    notifs.forEach((n) => {
+      if (n.to_sub === sub) {
+        n.read = true;
+      }
+    });
+    saveStoredNotifications(notifs);
+    return { success: true };
+  }
+
   // Fallback default
   return { success: true };
 }
+

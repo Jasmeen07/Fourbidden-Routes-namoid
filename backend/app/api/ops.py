@@ -46,9 +46,11 @@ def list_notifications(
             "message": n.message,
             "created_at": n.created_at.isoformat(),
             "read_at": n.read_at.isoformat() if n.read_at else None,
+            "read": bool(n.read_at is not None),
         }
         for n in notifs
     ]
+
 
 
 @router.post("/api/notifications/{notif_id}/read")
@@ -66,7 +68,7 @@ def mark_notification_read(
         raise HTTPException(status_code=404, detail="Notification not found")
     notif.read_at = now
     db.commit()
-    return {"id": notif.id, "read_at": notif.read_at.isoformat()}
+    return {"id": notif.id, "read_at": notif.read_at.isoformat(), "success": True}
 
 
 @router.post("/api/dev/clock/advance")
