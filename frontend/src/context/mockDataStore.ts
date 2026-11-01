@@ -2059,6 +2059,397 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
     return { success: true };
   }
 
+  // 15. Cryptographic Audit Trail
+  if (pathname === '/api/audit' && method === 'GET') {
+    return [
+      {
+        seq: 1,
+        id: 'aud_001',
+        type: 'POLICY_INGESTED',
+        ts: new Date(Date.now() - 3600000 * 48).toISOString(),
+        actor_sub: 'system',
+        actor_role: 'SYSTEM',
+        subject_type: 'policy',
+        subject_id: 'policy.yaml',
+        payload: { version: 1, tiers: ['PUBLIC_SYNTHETIC', 'INTERNAL_SYNTHETIC', 'RESTRICTED_SYNTHETIC'] },
+        prev_hash: '0000000000000000000000000000000000000000000000000000000000000000',
+        hash: '8f4c2e6d9b1a3c5e7f0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c',
+      },
+      {
+        seq: 2,
+        id: 'aud_002',
+        type: 'RESOURCE_REGISTERED',
+        ts: new Date(Date.now() - 3600000 * 36).toISOString(),
+        actor_sub: 'david',
+        actor_role: 'SECURITY_ADMIN',
+        subject_type: 'resource',
+        subject_id: 'D-claims-synth',
+        payload: { name: 'Synthetic Insurance Claims Dataset', tier: 'RESTRICTED_SYNTHETIC' },
+        prev_hash: '8f4c2e6d9b1a3c5e7f0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c',
+        hash: '7a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b',
+      },
+      {
+        seq: 3,
+        id: 'aud_003',
+        type: 'REQUEST_SUBMITTED',
+        ts: new Date(Date.now() - 3600000 * 6).toISOString(),
+        actor_sub: 'priya',
+        actor_role: 'ML_ENGINEER',
+        subject_type: 'request',
+        subject_id: 'req_priya_claims_approved',
+        payload: { purpose_code: 'FRAUD_RULE_TUNING', actions: ['read_sample'], duration_minutes: 1440 },
+        prev_hash: '7a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b',
+        hash: '6b2a4c6e8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e',
+      },
+      {
+        seq: 4,
+        id: 'aud_004',
+        type: 'SLOT_DECIDED',
+        ts: new Date(Date.now() - 3600000 * 5).toISOString(),
+        actor_sub: 'carol',
+        actor_role: 'DATA_GOVERNANCE',
+        subject_type: 'slot',
+        subject_id: 'slot_priya_mgr_01',
+        payload: { decision: 'APPROVE', rationale: 'Approved for fraud detection benchmarking in isolated workspace.' },
+        prev_hash: '6b2a4c6e8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e',
+        hash: '5a1b3c5e7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c',
+      },
+      {
+        seq: 5,
+        id: 'aud_005',
+        type: 'SLOT_DECIDED',
+        ts: new Date(Date.now() - 3600000 * 4.5).toISOString(),
+        actor_sub: 'david',
+        actor_role: 'SECURITY_ADMIN',
+        subject_type: 'slot',
+        subject_id: 'slot_priya_own_01',
+        payload: { decision: 'APPROVE', rationale: 'Synthetic claims dataset sample read parameters verified.' },
+        prev_hash: '5a1b3c5e7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c',
+        hash: '4c6e8f0a2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a',
+      },
+      {
+        seq: 6,
+        id: 'aud_006',
+        type: 'SLOT_DECIDED',
+        ts: new Date(Date.now() - 3600000 * 4).toISOString(),
+        actor_sub: 'elena',
+        actor_role: 'COMPLIANCE',
+        subject_type: 'slot',
+        subject_id: 'slot_priya_rsk_01',
+        payload: { decision: 'NARROW', rationale: 'Approved with duration capped at 24h and activity logging enforced (SG-6).' },
+        prev_hash: '4c6e8f0a2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a',
+        hash: '3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b3d5f',
+      },
+      {
+        seq: 7,
+        id: 'aud_007',
+        type: 'GRANT_ACTIVATED',
+        ts: new Date(Date.now() - 3600000 * 4).toISOString(),
+        actor_sub: 'system',
+        actor_role: 'SYSTEM',
+        subject_type: 'grant',
+        subject_id: 'grant_claims_priya_02',
+        payload: { resource_id: 'D-claims-synth', duration_seconds: 86400, actions: ['read_sample'] },
+        prev_hash: '3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b3d5f',
+        hash: '2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b',
+      },
+      {
+        seq: 8,
+        id: 'aud_008',
+        type: 'PEP_EVALUATION',
+        ts: new Date(Date.now() - 3600000 * 2).toISOString(),
+        actor_sub: 'priya',
+        actor_role: 'REQUESTER',
+        subject_type: 'resource',
+        subject_id: 'D-claims-synth',
+        payload: { action: 'read_sample', purpose: 'FRAUD_RULE_TUNING', decision: 'ALLOW' },
+        prev_hash: '2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b',
+        hash: '1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c',
+      },
+      {
+        seq: 9,
+        id: 'aud_009',
+        type: 'ACCESS_DENIED',
+        ts: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+        actor_sub: 'priya',
+        actor_role: 'REQUESTER',
+        subject_type: 'resource',
+        subject_id: 'M-credit-risk-v2',
+        payload: { violation: true, decision_code: 'DENY_PURPOSE_MISMATCH', declared_purpose: 'Unauthorized Commercial Extraction' },
+        prev_hash: '1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c',
+        hash: '9f0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b',
+      },
+      {
+        seq: 10,
+        id: 'aud_010',
+        type: 'WAF_INTERCEPTION',
+        ts: new Date(Date.now() - 3600000 * 1).toISOString(),
+        actor_sub: '198.51.100.99',
+        actor_role: 'ANONYMOUS',
+        subject_type: 'api_gateway',
+        subject_id: 'WAF_SENTINEL',
+        payload: { attack_type: 'SQLI', severity: 'CRITICAL', risk_score: 95, action: 'BLOCKED' },
+        prev_hash: '9f0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b',
+        hash: '8e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b',
+      },
+    ];
+  }
+
+  // 15.1 Verify Audit Chain
+  if (pathname === '/api/audit/verify' && method === 'GET') {
+    return {
+      valid: true,
+      events_verified: 10,
+      head_hash: '8e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3b5c7d9e1f3a5c7e9b1d3f5a7c9e1b',
+      chain_intact: true,
+      sqlite_triggers_enforced: true,
+      verified_at: new Date().toISOString(),
+    };
+  }
+
+  // 16. Policy-as-Code & Linter
+  if (pathname === '/api/policy/lint' && method === 'GET') {
+    return {
+      is_valid: true,
+      status: 'PASS',
+      version: '1.0.0 (GrantGate Policy-as-Code)',
+      checked_at: new Date().toISOString(),
+      total_findings: 0,
+      findings_count: 0,
+      findings: [],
+    };
+  }
+
+  if (pathname === '/api/policy' && method === 'GET') {
+    return {
+      version: 1,
+      assumption_notice: 'Values below are demo defaults, NOT NamoID policy. Confirm with NamoID.',
+      limits: {
+        min_duration_minutes: 2,
+        max_duration_minutes_by_tier: {
+          PUBLIC_SYNTHETIC: 10080,
+          INTERNAL_SYNTHETIC: 4320,
+          RESTRICTED_SYNTHETIC: 1440,
+        },
+        max_cumulative_minutes_with_extensions: 20160,
+        request_pending_ttl_hours: 72,
+      },
+      approval_matrix: {
+        PUBLIC_SYNTHETIC: ['manager', 'resource_owner', 'risk_reviewer'],
+        INTERNAL_SYNTHETIC: ['manager', 'resource_owner', 'risk_reviewer'],
+        RESTRICTED_SYNTHETIC: ['manager', 'resource_owner', 'risk_reviewer'],
+      },
+      purposes: [
+        'MODEL_EVALUATION',
+        'BIAS_AUDIT',
+        'FRAUD_RULE_TUNING',
+        'PROTOTYPE_DEMO',
+        'SECURITY_REDTEAM_SIM',
+        'ANALYTICS_REPORTING',
+      ],
+      risk_controls: {
+        catalog: [
+          'activity_logging',
+          'synthetic_data_only',
+          'isolated_workspace',
+          'output_filtering',
+          'no_export',
+          'human_review_of_outputs',
+          'retention_limit_declared',
+        ],
+        required_by_tier: {
+          PUBLIC_SYNTHETIC: ['activity_logging'],
+          INTERNAL_SYNTHETIC: ['activity_logging', 'synthetic_data_only'],
+          RESTRICTED_SYNTHETIC: ['activity_logging', 'synthetic_data_only', 'isolated_workspace'],
+        },
+      },
+      raw_yaml: `version: 1
+assumption_notice: "Values below are demo defaults, NOT NamoID policy. Confirm with NamoID."
+limits:
+  min_duration_minutes: 2
+  max_duration_minutes_by_tier:
+    PUBLIC_SYNTHETIC: 10080
+    INTERNAL_SYNTHETIC: 4320
+    RESTRICTED_SYNTHETIC: 1440
+approval_matrix:
+  PUBLIC_SYNTHETIC:     [manager, resource_owner, risk_reviewer]
+  INTERNAL_SYNTHETIC:   [manager, resource_owner, risk_reviewer]
+  RESTRICTED_SYNTHETIC: [manager, resource_owner, risk_reviewer]
+purposes:
+  - MODEL_EVALUATION
+  - BIAS_AUDIT
+  - FRAUD_RULE_TUNING
+  - PROTOTYPE_DEMO
+  - SECURITY_REDTEAM_SIM
+  - ANALYTICS_REPORTING`,
+    };
+  }
+
+  // 17. PEP Simulator Violations Stream
+  if (pathname === '/api/sim/violations' && method === 'GET') {
+    return [
+      {
+        seq: 9,
+        ts: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+        actor_sub: 'priya',
+        resource_id: 'M-credit-risk-v2',
+        action: 'query',
+        declared_purpose: 'Unauthorized Commercial Extraction / Secondary Monetization',
+        decision_code: 'DENY_PURPOSE_MISMATCH',
+        grant_id: 'grant_claims_priya_02',
+      },
+      {
+        seq: 11,
+        ts: new Date(Date.now() - 3600000 * 4).toISOString(),
+        actor_sub: 'AG102',
+        resource_id: 'finance.csv',
+        action: 'export',
+        declared_purpose: 'Customer Support Chatbot Fine-Tuning',
+        decision_code: 'DENY_ACTION_NOT_GRANTED',
+        grant_id: 'grant_synth_cust_01',
+      },
+      {
+        seq: 12,
+        ts: new Date(Date.now() - 3600000 * 8).toISOString(),
+        actor_sub: 'AG301',
+        resource_id: 'finance.csv',
+        action: 'external_send',
+        declared_purpose: 'Customer Support Chatbot Fine-Tuning',
+        decision_code: 'DENY_EGRESS_DESTINATION_BLOCKED',
+        grant_id: 'grant_claims_priya_02',
+      },
+    ];
+  }
+
+  // 17.1 PEP Simulator Invocation
+  if (pathname === '/api/sim/invoke' && method === 'POST') {
+    const body = options.body ? JSON.parse(String(options.body)) : {};
+    const purpose = (body.declared_purpose || '').toLowerCase();
+    const actionReq = (body.action || 'query').toLowerCase();
+    const caller = body.caller_sub || currentUser?.sub || 'priya';
+    const targetDest = body.target_destination || '';
+    const eventId = body.event_id || '';
+
+    let allow = true;
+    let code = 'ALLOW_PERMITTED';
+    let violation = false;
+    let denialReason: string | null = null;
+
+    if (purpose.includes('unauthorized') || purpose.includes('monetization') || purpose.includes('extraction')) {
+      allow = false;
+      code = 'DENY_PURPOSE_MISMATCH';
+      violation = true;
+      denialReason = 'Declared purpose is outside the bounds of the active grant justification.';
+    } else if (actionReq === 'export') {
+      allow = false;
+      code = 'DENY_ACTION_NOT_GRANTED';
+      violation = true;
+      denialReason = 'Requested action "export" exceeds granted permission limits (read_sample only).';
+    } else if (caller === 'AG102' && actionReq === 'export') {
+      allow = false;
+      code = 'DENY_AGENT_NOT_AUTHORIZED';
+      violation = true;
+      denialReason = 'AI Agent AG102 lacks delegated permissions for export operations.';
+    } else if (targetDest.includes('evil.com') || targetDest.includes('exfiltrate')) {
+      allow = false;
+      code = 'DENY_EGRESS_DESTINATION_BLOCKED';
+      violation = true;
+      denialReason = 'Target destination host is unverified and blocked by automated egress guardrails.';
+    } else if (eventId === 'evt_send_external') {
+      allow = false;
+      code = 'DENY_TAINT_PROPAGATION';
+      violation = true;
+      denialReason = 'Provenance pipeline detected untrusted taint attached to event payload.';
+    }
+
+    const steps = [
+      { check: 'CHECK_ACTIVE_GRANT_EXISTS', status: 'PASS', detail: 'Verified active grant in SQLite table', timestamp: new Date().toISOString() },
+      { check: 'CHECK_EXPIRATION_TIME', status: 'PASS', detail: 'Server clock evaluation confirms grant within TTL', timestamp: new Date().toISOString() },
+      { check: 'CHECK_REQUESTER_IDENTITY', status: 'PASS', detail: `Authenticated subject matched: ${caller}`, timestamp: new Date().toISOString() },
+      {
+        check: 'CHECK_PURPOSE_BOUNDS',
+        status: code === 'DENY_PURPOSE_MISMATCH' ? 'FAIL' : 'PASS',
+        detail: code === 'DENY_PURPOSE_MISMATCH' ? 'Purpose mismatch detected' : 'Declared purpose conforms to active grant specification',
+        timestamp: new Date().toISOString(),
+      },
+      {
+        check: 'CHECK_ACTION_LIMITS',
+        status: code === 'DENY_ACTION_NOT_GRANTED' ? 'FAIL' : 'PASS',
+        detail: code === 'DENY_ACTION_NOT_GRANTED' ? 'Action exceeded limits' : `Action "${actionReq}" is within allowed scope`,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        check: 'CHECK_GUARDRAIL_DESTINATION',
+        status: code === 'DENY_EGRESS_DESTINATION_BLOCKED' ? 'FAIL' : 'PASS',
+        detail: code === 'DENY_EGRESS_DESTINATION_BLOCKED' ? 'Target host untrusted' : 'Destination conforms to network boundaries',
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    const mockResponse = allow ? {
+      watermark: `WATERMARK-SANDBOX-${body.resource_id || 'dataset'}-${Date.now()}`,
+      resource_id: body.resource_id || 'D-claims-synth',
+      action: actionReq,
+      payload_preview: {
+        records_returned: 10,
+        synthetic_sample: true,
+        de_identified: true,
+        data_preview: [
+          { claim_id: 'CLM-9021', fraud_score: 0.12, status: 'VERIFIED' },
+          { claim_id: 'CLM-9022', fraud_score: 0.88, status: 'FLAGGED' },
+        ],
+      },
+    } : null;
+
+    const traceObj = {
+      decision: allow ? 'ALLOW' : 'DENY',
+      grant_id: body.grant_id || 'grant_claims_priya_02',
+      subject_id: caller,
+      resource_id: body.resource_id || 'D-claims-synth',
+      action: actionReq,
+      purpose: body.declared_purpose,
+      steps,
+      timestamp: new Date().toISOString(),
+      denial_reason: denialReason,
+      mock_response: mockResponse,
+    };
+
+    return {
+      decision: allow ? 'ALLOW' : 'DENY',
+      code,
+      violation,
+      decision_trace: traceObj,
+      output: mockResponse?.payload_preview,
+    };
+  }
+
+  // 18. Hierarchy Principals
+  if (pathname === '/api/hierarchy/principals' && method === 'GET') {
+    return {
+      principals: [
+        { id: 'fiona', name: 'Fiona Gallagher', role: 'Executive', department: 'Executive', is_agent: false },
+        { id: 'carol', name: 'Carol Danvers', role: 'Data Governance Manager', department: 'Data Governance', is_agent: false },
+        { id: 'david', name: 'David Miller', role: 'Security Admin', department: 'Security', is_agent: false },
+        { id: 'elena', name: 'Elena Rostova', role: 'Compliance Officer', department: 'Compliance', is_agent: false },
+        { id: 'priya', name: 'Priya Sharma', role: 'Lead ML Engineer', department: 'AI Engineering', is_agent: false },
+        { id: 'alice', name: 'Alice Chen', role: 'ML Engineer', department: 'AI Engineering', is_agent: false },
+        { id: 'AG102', name: 'Engineering AI Agent', role: 'AI Agent', department: 'Engineering', is_agent: true },
+        { id: 'AG201', name: 'Finance AI Agent', role: 'AI Agent', department: 'Finance', is_agent: true },
+        { id: 'AG301', name: 'Network AI Agent', role: 'AI Agent', department: 'Security', is_agent: true },
+      ],
+    };
+  }
+
+  // 19. Provenance Event Nodes
+  if (pathname === '/api/provenance/events' && method === 'GET') {
+    return {
+      nodes: [
+        { id: 'evt_query_01', type: 'DATA_READ', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), details: 'Model evaluation query' },
+        { id: 'evt_send_external', type: 'EXTERNAL_SEND', timestamp: new Date(Date.now() - 3600000 * 1).toISOString(), details: 'Attempted external egress' },
+      ],
+    };
+  }
+
   // Fallback default
   return { success: true };
 }
