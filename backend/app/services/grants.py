@@ -48,6 +48,7 @@ class GrantsService:
             "activated_at": grant.activated_at.isoformat(),
             "expires_at": grant.expires_at.isoformat(),
             "status": eff_status.value,
+            "effective_status": eff_status.value,
             "stored_status": grant.status,
             "revoked_at": grant.revoked_at.isoformat() if grant.revoked_at else None,
             "revoked_by_sub": grant.revoked_by_sub,

@@ -372,21 +372,25 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
   }
 
   // 5. Review slot decision
-  if (pathname.includes('/slots/') && pathname.endsWith('/decision') && method === 'POST') {
+  const isDecisionRoute =
+    (pathname.endsWith('/decisions') || (pathname.includes('/slots/') && pathname.endsWith('/decision'))) &&
+    method === 'POST';
+  if (isDecisionRoute) {
     const parts = pathname.split('/');
     const reqId = parts[3];
-    const slotId = parts[5];
     const body = options.body ? JSON.parse(String(options.body)) : {};
+    const slotId = body.slot_id || (parts[4] === 'slots' ? parts[5] : null);
     const requests = getStoredRequests();
 
     const reqIdx = requests.findIndex((r) => r.id === reqId);
     if (reqIdx >= 0) {
       const req = { ...requests[reqIdx] };
-      const slot = req.slots.find((s) => s.id === slotId);
+      const slot = req.slots.find((s) => s.id === slotId || (body.slot_role && s.slot_role === body.slot_role));
       if (slot) {
-        slot.status = body.decision === 'REJECT' ? 'REJECTED' : (body.approved_limits ? 'NARROWED' : 'APPROVED');
-        slot.decision = body.decision || 'APPROVE';
-        slot.rationale = body.rationale || 'Reviewed and approved under policy controls.';
+        const decUpper = String(body.decision || 'APPROVE').toUpperCase();
+        slot.decision = decUpper;
+        slot.status = decUpper === 'REJECT' ? 'REJECTED' : (decUpper === 'NARROW' || body.approved_limits ? 'NARROWED' : 'APPROVED');
+        slot.rationale = body.rationale || 'Reviewed and decided under multi-party governance.';
         slot.decided_by_sub = currentUser?.sub || 'reviewer';
         slot.decided_at = new Date().toISOString();
         if (body.approved_limits) {
@@ -394,7 +398,7 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
         }
       }
 
-      // If all slots decided
+      // Check all slots
       const allApproved = req.slots.every((s) => s.status === 'APPROVED' || s.status === 'NARROWED');
       const anyRejected = req.slots.some((s) => s.status === 'REJECTED');
 
@@ -405,7 +409,20 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
 
         // Auto-activate Grant
         const grants = getStoredGrants();
-        const durationMin = req.duration_minutes || 1440;
+        let finalDurationMin = req.duration_minutes || 1440;
+        let finalActions = [...(req.actions || [])];
+
+        req.slots.forEach((s) => {
+          if (s.approved_limits) {
+            if (s.approved_limits.duration_minutes) {
+              finalDurationMin = Math.min(finalDurationMin, Number(s.approved_limits.duration_minutes));
+            }
+            if (Array.isArray(s.approved_limits.actions)) {
+              finalActions = finalActions.filter((a) => s.approved_limits!.actions!.includes(a));
+            }
+          }
+        });
+
         const newGrant: Grant = {
           id: `grant_${Date.now().toString(36)}`,
           request_id: req.id,
@@ -416,21 +433,28 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
           resource_name: req.resource_name,
           resource_tier: req.resource_tier,
           purpose_code: req.purpose_code,
-          actions: req.actions,
-          duration_seconds: durationMin * 60,
+          actions: finalActions.length > 0 ? finalActions : req.actions,
+          duration_seconds: finalDurationMin * 60,
           status: 'ACTIVE',
           effective_status: 'ACTIVE',
           activated_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + durationMin * 60 * 1000).toISOString(),
-          invocation_count: 1,
+          expires_at: new Date(Date.now() + finalDurationMin * 60 * 1000).toISOString(),
+          invocation_count: 0,
           utilization_status: 'ACTIVE_UTILIZING',
         };
-        saveStoredGrants([newGrant, ...grants]);
+
+        const existingIdx = grants.findIndex((g) => g.request_id === req.id);
+        if (existingIdx >= 0) {
+          grants[existingIdx] = newGrant;
+        } else {
+          grants.unshift(newGrant);
+        }
+        saveStoredGrants(grants);
       }
 
       requests[reqIdx] = req;
       saveStoredRequests(requests);
-      return { success: true, request: req };
+      return { success: true, request: req, request_status: req.status };
     }
     return { success: true };
   }
@@ -451,45 +475,57 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
   // 7. Grants list
   if (pathname === '/api/grants' && method === 'GET') {
     const grants = getStoredGrants();
-    const statusParam = url.searchParams.get('status') || 'all';
+    const statusParam = (url.searchParams.get('status') || 'all').toLowerCase();
+    const scopeParam = (url.searchParams.get('scope') || 'visible').toLowerCase();
     const sub = currentUser?.sub || 'priya';
     const roles = (currentUser?.roles || []).map((r: string) => r.toLowerCase());
-    const isPrivileged = roles.some((r: string) => ['admin', 'executive', 'compliance', 'security_admin', 'data_governance', 'risk_reviewer'].includes(r));
+    const isPrivileged = roles.some((r: string) =>
+      ['admin', 'executive', 'compliance', 'security_admin', 'data_governance', 'risk_reviewer', 'manager', 'resource_owner'].includes(r)
+    );
 
-    return grants.filter((g) => {
-      if (statusParam === 'active' && g.status !== 'ACTIVE') return false;
-      if (!isPrivileged && g.requester_sub !== sub) return false;
-      return true;
-    });
+    return grants
+      .map((g) => {
+        const isExpired = g.expires_at && new Date(g.expires_at).getTime() <= Date.now();
+        const eff = g.status === 'REVOKED' ? 'REVOKED' : isExpired ? 'EXPIRED' : 'ACTIVE';
+        return {
+          ...g,
+          status: eff,
+          effective_status: eff,
+        };
+      })
+      .filter((g) => {
+        if (statusParam === 'active' && g.status !== 'ACTIVE') return false;
+        if (statusParam === 'expired' && g.status !== 'EXPIRED') return false;
+        if (statusParam === 'revoked' && g.status !== 'REVOKED') return false;
+
+        if (scopeParam === 'mine') {
+          return g.requester_sub === sub;
+        }
+        if (scopeParam === 'visible' && !isPrivileged) {
+          return g.requester_sub === sub;
+        }
+        return true;
+      });
   }
 
-  // 8. Revoke Grant
-  if (pathname.includes('/api/grants/') && pathname.endsWith('/revoke') && method === 'POST') {
+  // 8. Revoke Grant & Early Release
+  if (pathname.includes('/api/grants/') && (pathname.endsWith('/revoke') || pathname.endsWith('/release-early')) && method === 'POST') {
     const parts = pathname.split('/');
     const grantId = parts[3];
     const body = options.body ? JSON.parse(String(options.body)) : {};
     const grants = getStoredGrants();
     const g = grants.find((x) => x.id === grantId);
     if (g) {
-      g.status = 'REVOKED';
-      g.effective_status = 'REVOKED';
-      g.revoked_at = new Date().toISOString();
-      g.revocation_reason = body.note || 'Revoked by authorized governance administrator.';
-      g.revoke_emergency = !!body.emergency;
-      saveStoredGrants(grants);
-    }
-    return { success: true, grant: g };
-  }
-
-  // 9. Early Release Grant
-  if (pathname.includes('/api/grants/') && pathname.endsWith('/early-release') && method === 'POST') {
-    const parts = pathname.split('/');
-    const grantId = parts[3];
-    const grants = getStoredGrants();
-    const g = grants.find((x) => x.id === grantId);
-    if (g) {
-      g.status = 'EXPIRED';
-      g.effective_status = 'EXPIRED';
+      if (pathname.endsWith('/release-early') || body.reason_code === 'PURPOSE_COMPLETE') {
+        g.status = 'EXPIRED';
+        g.effective_status = 'EXPIRED';
+      } else {
+        g.status = 'REVOKED';
+        g.effective_status = 'REVOKED';
+        g.revoked_at = new Date().toISOString();
+        g.revocation_reason = body.note || 'Revoked by authorized governance administrator.';
+        g.revoke_emergency = Boolean(body.emergency);
+      }
       saveStoredGrants(grants);
     }
     return { success: true, grant: g };

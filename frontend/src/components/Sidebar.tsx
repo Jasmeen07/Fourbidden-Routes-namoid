@@ -21,8 +21,42 @@ import { useAuth } from '../context/AuthContext';
 
 export const Sidebar: React.FC = () => {
   const location = useLocation();
-  const { activePersonaId, personas, switchPersona } = useAuth();
+  const { activePersonaId, personas, switchPersona, apiFetch, user } = useAuth();
   const currentPersona = personas.find((p) => p.id === activePersonaId) || personas[0];
+  const [pendingApprovalsCount, setPendingApprovalsCount] = React.useState<number>(0);
+  const [activeGrantsCount, setActiveGrantsCount] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchCounts = async () => {
+      try {
+        const reqData = await apiFetch('/api/requests?view=visible');
+        const reqList: any[] = Array.isArray(reqData) ? reqData : (reqData.requests || []);
+        let pCount = 0;
+        for (const r of reqList) {
+          if (r.status === 'IN_REVIEW' || r.status === 'BLOCKED') {
+            const pendingSlots = (r.slots || []).filter((s: any) => s.status === 'PENDING');
+            pCount += pendingSlots.length;
+          }
+        }
+        if (isMounted) setPendingApprovalsCount(pCount);
+
+        const grantData = await apiFetch('/api/grants?status=active&scope=visible');
+        const grantList: any[] = Array.isArray(grantData) ? grantData : (grantData.grants || []);
+        const aCount = grantList.filter((g: any) => (g.effective_status || g.status) === 'ACTIVE').length;
+        if (isMounted) setActiveGrantsCount(aCount);
+      } catch {
+        // Ignore background polling errors
+      }
+    };
+
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 6000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activePersonaId, user, location.pathname]);
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: Home, matchPaths: ['/', '/dashboard'] },
@@ -30,10 +64,24 @@ export const Sidebar: React.FC = () => {
     { label: 'My Access & Security', path: '/hierarchy', icon: ShieldCheck, matchPaths: ['/hierarchy'] },
     { label: 'AI Security Command Center', path: '/provenance', icon: Activity, matchPaths: ['/provenance'] },
     { label: 'Access Requests', path: '/requests', icon: FileText, matchPaths: ['/requests', '/requests/new'] },
-    { label: 'Approvals', path: '/reviews', icon: CheckSquare, matchPaths: ['/reviews'] },
+    {
+      label: 'Approvals',
+      path: '/reviews',
+      icon: CheckSquare,
+      matchPaths: ['/reviews'],
+      badge: pendingApprovalsCount,
+      badgeStyle: { background: '#e11d48' },
+    },
     { label: 'Datasets & Models', path: '/catalog', icon: Box, matchPaths: ['/catalog'] },
     { label: 'Relationship View', path: '/relationships', icon: Share2, matchPaths: ['/relationships'] },
-    { label: 'Active Grants', path: '/grants', icon: Database, matchPaths: ['/grants'] },
+    {
+      label: 'Active Grants',
+      path: '/grants',
+      icon: Database,
+      matchPaths: ['/grants'],
+      badge: activeGrantsCount,
+      badgeStyle: { background: '#059669' },
+    },
     { label: 'Risk & Compliance', path: '/policy', icon: ShieldCheck, matchPaths: ['/policy'] },
     { label: 'Audit Logs', path: '/audit', icon: History, matchPaths: ['/audit'] },
     { label: 'PEP Simulator', path: '/simulator', icon: Terminal, matchPaths: ['/simulator'] },
@@ -85,6 +133,11 @@ export const Sidebar: React.FC = () => {
                 <Icon size={18} strokeWidth={isActive ? 2.2 : 1.75} />
               </div>
               <span className="nav-item-label">{item.label}</span>
+              {item.badge != null && item.badge > 0 && (
+                <span className="sidebar-nav-badge" style={item.badgeStyle}>
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           );
         })}

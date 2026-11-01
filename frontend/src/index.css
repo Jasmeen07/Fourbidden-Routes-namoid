@@ -228,6 +228,19 @@ code, pre, .font-mono {
   letter-spacing: 0.01em;
 }
 
+.sidebar-nav-badge {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: #e11d48;
+  color: #ffffff;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 /* Lower Sidebar Area */
 .sidebar-footer {
   position: relative;
