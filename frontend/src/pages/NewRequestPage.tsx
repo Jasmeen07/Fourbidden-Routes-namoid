@@ -376,27 +376,33 @@ export const NewRequestPage: React.FC = () => {
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  {approvalPreview.steps.map((stg, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: 'var(--bg-subtle)',
-                        borderRadius: '6px',
-                        padding: '0.75rem 0.9rem',
-                        borderLeft: stg.is_crucial_escalation ? '3px solid var(--accent-wine)' : '3px solid var(--accent-emerald)',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                        Step {stg.level}: {stg.slot_role}
+                  {(approvalPreview.steps || (approvalPreview as any).approval_path || []).map((stg: any, i: number) => {
+                    const stepLevel = stg.level || stg.stage || (i + 1);
+                    const stepRole = stg.slot_role || stg.role || 'reviewer';
+                    const stepTitle = stg.title || stg.reviewer || stg.slot_role || 'Reviewer';
+                    const stepSub = stg.assigned_sub || stg.reviewer || 'reviewer';
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          background: 'var(--bg-subtle)',
+                          borderRadius: '6px',
+                          padding: '0.75rem 0.9rem',
+                          borderLeft: stg.is_crucial_escalation ? '3px solid var(--accent-wine)' : '3px solid var(--accent-emerald)',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Step {stepLevel}: {stepRole}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.15rem' }}>
+                          {stepTitle}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          Reviewer: <code>{stepSub}</code>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.15rem' }}>
-                        {stg.title}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        Reviewer: <code>{stg.assigned_sub}</code>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (

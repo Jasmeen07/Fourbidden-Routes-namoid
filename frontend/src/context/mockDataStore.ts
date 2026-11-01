@@ -497,14 +497,25 @@ export function handleMockApi(path: string, options: RequestInit = {}, currentUs
 
   // 10. Hierarchy approval preview
   if (pathname === '/api/hierarchy/preview-approval') {
+    const resId = url.searchParams.get('resource_id') || 'D-customers-synth';
+    const resource = INITIAL_RESOURCES.find((r) => r.id === resId) || INITIAL_RESOURCES[0];
     return {
-      requester: { sub: currentUser?.sub || 'priya', department: 'Engineering' },
+      requester_id: currentUser?.sub || 'priya',
+      requester_name: currentUser?.display_name || 'Priya Sharma',
+      resource_id: resId,
+      resource_name: resource.name,
+      is_crucial: resource.tier === 'RESTRICTED_SYNTHETIC' || resource.tier === 'TIER_1_CRITICAL',
+      is_cross_dept: false,
+      steps: [
+        { level: 1, slot_role: 'manager', assigned_sub: 'carol', title: 'Carol Danvers (Engineering Manager)', is_crucial_escalation: false },
+        { level: 2, slot_role: 'risk_reviewer', assigned_sub: 'elena', title: 'Elena Rostova (Compliance & Risk Pool)', is_crucial_escalation: false },
+        { level: 3, slot_role: 'resource_owner', assigned_sub: 'david', title: 'David Miller (Resource Owner)', is_crucial_escalation: false },
+      ],
       approval_path: [
         { stage: 1, role: 'manager', reviewer: 'Carol Danvers (Engineering Manager)' },
         { stage: 2, role: 'risk_reviewer', reviewer: 'Elena Rostova (Compliance & Risk Pool)' },
         { stage: 3, role: 'resource_owner', reviewer: 'David Miller (Resource Owner)' },
       ],
-      is_crucial: false,
     };
   }
 
