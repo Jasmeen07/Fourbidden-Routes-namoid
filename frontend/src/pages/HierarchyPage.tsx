@@ -65,12 +65,13 @@ export const HierarchyPage: React.FC = () => {
       setDashboardData(data);
 
       // Auto-set initial active role tab based on primary capability
-      const profile = data.user_profile;
-      if (profile.is_admin && activeRoleTab === 'employee') {
+      const profile = data?.user_profile;
+      if (profile?.is_admin && activeRoleTab === 'employee') {
         setActiveRoleTab('employee'); // default to personal access, but admin tab is available
-      } else if (profile.is_manager && !profile.is_admin && activeRoleTab === 'employee') {
+      } else if (profile?.is_manager && !profile?.is_admin && activeRoleTab === 'employee') {
         // keep employee by default
       }
+
     } catch (err) {
       console.error('Failed to load my-access dashboard:', err);
     } finally {
