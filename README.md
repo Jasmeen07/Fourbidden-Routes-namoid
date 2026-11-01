@@ -23,8 +23,8 @@ NamoID product, security recommendation, or endorsement.
 - **Challenge ID:** `responsible-ai-access-gate`
 - **Contributor:** Jasmeen07
 - **Repository URL:** https://github.com/Jasmeen07/Fourbidden-Routes-namoid
-- **Live demo:** http://localhost:5173
-- **Final commit:** `c9ef249934878b4ea377ea694d2d7aba4fe79e1e`
+- **Live demo:** https://jasmeen07.github.io/Fourbidden-Routes-namoid/
+- **Final commit:** `d24deb9`
 - **License:** MIT
 
 ---
