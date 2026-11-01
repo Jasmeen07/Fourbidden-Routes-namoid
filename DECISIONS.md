@@ -85,3 +85,17 @@ Database Layer (SQLAlchemy + 7 SQLite Triggers) ◄────────┘
 2. **Deterministic Payload Generation (`sn_si_incident`):** A pure domain function formats the incident into standard ServiceNow Table API schema (`number`, `short_description`, `description`, `severity`, `priority`, `category`, `subcategory`, `state="1"`, `cmdb_ci`, `caller_id`, `work_notes`, `correlation_id`).
 3. **Outbound & Inbound Webhooks:** Outbound dispatches are mockable and resilient (Rule 7). An inbound webhook endpoint (`POST /api/secops/servicenow/webhook`) allows external ServiceNow instances to synchronize state updates (`INVESTIGATING`, `CONTAINED`, `RESOLVED`, `CLOSED`) and analyst notes back into GrantGate.
 4. **Strict Audit Trail:** Every ServiceNow dispatch and inbound webhook processing writes a cryptographic audit event (`SERVICENOW_SIR_OPENED`, `SERVICENOW_WEBHOOK_PROCESSED`) in the same database transaction (Rule 5).
+
+---
+
+## Security Orchestration, Automation, and Response (SOAR) Active Containment
+
+### Architecture & Decisions:
+1. **Pure Domain Containment Policy:** In accordance with Rule 2, pure domain predicates (`should_contain_user`, `evaluate_containment_reason`) evaluate whether malicious activity (WAF high-risk block or repeated threshold breaches) warrants immediate account suspension and grant revocation.
+2. **Automated SOAR Actions (`isolate_ip`, `revoke_and_block_user`, `isolate_ip_and_block_user`):**
+   - **IP Boundary Isolation:** Source IP is permanently quarantined in `IpReputation` with `PERM_BLOCKED` status and manual override lock.
+   - **User Suspension & Session Purge:** User account status is flipped to inactive (`user.active = False`), and all active authentication session records are deleted to immediately invalidate active tokens.
+   - **Emergency Grant Revocation:** All active access grants owned by the compromised principal are marked as `REVOKED` with `revoke_emergency = True`, halting Policy Enforcement Point (PEP) gateway invocation.
+3. **Transactional Audit & Notifications:** Every containment step publishes structured audit events (`USER_SUSPENDED`, `GRANT_REVOKED`, `CONTAINMENT_EXECUTED`) in the same database transaction (Rule 5), and writes alert notifications to user inboxes.
+4. **Analyst Command & Control:** SecOps console provides single-click containment playbooks with real-time feedback, investigation notes appended to the incident history, and summary telemetry updates.
+

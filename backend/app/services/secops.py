@@ -11,15 +11,26 @@ import ipaddress
 import json
 from typing import Any, Sequence
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, delete
 
-from app.db.models import SecurityEvent, SecurityIncident, IpReputation, ThreatIntelIndicator
+from app.db.models import (
+    SecurityEvent,
+    SecurityIncident,
+    IpReputation,
+    ThreatIntelIndicator,
+    User,
+    Grant,
+    Session as SessionModel,
+    Notification,
+)
 from app.domain.secops import (
     scan_input,
     calculate_risk_score,
     evaluate_ip_action,
     sanitize_content,
     mask_sensitive_data,
+    should_contain_user,
+    evaluate_containment_reason,
 )
 from app.ids import generate_id
 from app.services.audit import AuditService
@@ -231,6 +242,39 @@ class SecOpsService:
                 now=now,
             )
 
+        # 11. Automated Access Revocation & Account Suspension for repeated malicious requests from same IP (EC-SEC07, EC-SEC10)
+        user_blocked = False
+        revoked_grants_count = 0
+        effective_attempts = repeat_count + (1 if (threats or is_threat_intel) else 0)
+
+        # Contain user when request is identified and authenticated/attributed to user_sub
+        target_sub = user_sub
+
+        if target_sub and not is_allowlisted:
+            if should_contain_user(action=action, repeat_count=effective_attempts, risk_score=risk_score, user_sub=target_sub):
+                contain_reason = evaluate_containment_reason(action, effective_attempts, risk_score)
+                res_contain = SecOpsService.revoke_access_and_block_user(
+                    db=db,
+                    user_sub=target_sub,
+                    reason=f"{contain_reason} from IP {ip}",
+                    actor_sub="system:secops_waf",
+                    now=now,
+                    source_ip=ip,
+                )
+                user_blocked = res_contain["user_blocked"]
+                revoked_grants_count = res_contain["revoked_grants_count"]
+
+                if incident_id:
+                    inc_obj = db.get(SecurityIncident, incident_id)
+                    if inc_obj:
+                        inc_notes = list(inc_obj.investigation_notes or [])
+                        inc_notes.append({
+                            "author": "SecOps Automated WAF Containment",
+                            "timestamp": now.isoformat(),
+                            "text": f"Containment Triggered: User {target_sub} account blocked, sessions terminated, and {revoked_grants_count} active access grants revoked due to repeated malicious requests from IP {ip}.",
+                        })
+                        inc_obj.investigation_notes = inc_notes
+
         return {
             "allowed": action != "BLOCKED",
             "action": action,
@@ -239,6 +283,8 @@ class SecOpsService:
             "severity": severity,
             "event_id": event_id,
             "incident_id": incident_id,
+            "user_blocked": user_blocked,
+            "revoked_grants_count": revoked_grants_count,
             "threats_detected": [
                 {
                     "category": t.category,
@@ -269,7 +315,10 @@ class SecOpsService:
     ) -> str:
         """ServiceNow SIR: Automatically create a security incident for high-risk attacks."""
         inc_count = db.execute(select(func.count(SecurityIncident.id))).scalar() or 0
-        incident_id = f"INC-2026-{10001 + inc_count}"
+        candidate_num = 10001 + inc_count
+        while db.get(SecurityIncident, f"INC-2026-{candidate_num}"):
+            candidate_num += 1
+        incident_id = f"INC-2026-{candidate_num}"
 
         p_threat = threats[0].category if threats else ("THREAT_INTEL" if ti_match else "SUSPICIOUS_ACCESS")
         title = f"WAF Defense Alert: {p_threat} detected from {ip}"
@@ -394,6 +443,96 @@ class SecOpsService:
         return incident
 
     @staticmethod
+    def revoke_access_and_block_user(
+        db: Session,
+        user_sub: str,
+        reason: str,
+        actor_sub: str,
+        now: datetime,
+        source_ip: str | None = None,
+    ) -> dict[str, Any]:
+        """Revokes all active access grants, invalidates all sessions, and deactivates user account (EC-SEC07, EC-SEC10)."""
+        user = db.get(User, user_sub)
+        if not user:
+            return {"user_sub": user_sub, "user_found": False, "revoked_grants_count": 0, "user_blocked": False}
+
+        was_active = user.active
+        user.active = False
+
+        # Invalidate all server sessions for this user
+        db.execute(delete(SessionModel).where(SessionModel.sub == user_sub))
+
+        # Revoke all active grants owned by this user
+        active_grants = db.execute(
+            select(Grant).where(
+                Grant.requester_sub == user_sub,
+                Grant.status == "ACTIVE",
+            )
+        ).scalars().all()
+
+        revoked_count = 0
+        valid_revoker = actor_sub if db.get(User, actor_sub) else ("R001" if db.get(User, "R001") else user_sub)
+        for grant in active_grants:
+            grant.status = "REVOKED"
+            grant.revoked_at = now
+            grant.revoked_by_sub = valid_revoker
+            grant.revoke_reason_code = "SECURITY_INCIDENT"
+            grant.revoke_emergency = True
+            revoked_count += 1
+
+            AuditService.append_event(
+                session=db,
+                event_type="GRANT_REVOKED",
+                subject_type="grant",
+                subject_id=grant.id,
+                actor_sub=actor_sub,
+                actor_role="secops",
+                payload={
+                    "resource_id": grant.resource_id,
+                    "reason_code": "SECURITY_INCIDENT",
+                    "emergency": True,
+                    "note": reason,
+                    "revoked_at": now.isoformat(),
+                },
+                now=now,
+            )
+
+            db.add(
+                Notification(
+                    id=generate_id("notif"),
+                    to_sub=user_sub,
+                    kind="GRANT_REVOKED",
+                    ref_id=grant.id,
+                    message=f"EMERGENCY: Grant {grant.id} revoked due to security incident containment: {reason}",
+                    created_at=now,
+                )
+            )
+
+        if was_active:
+            AuditService.append_event(
+                session=db,
+                event_type="USER_SUSPENDED",
+                subject_type="user",
+                subject_id=user.sub,
+                actor_sub=actor_sub,
+                actor_role="secops",
+                payload={
+                    "user_sub": user.sub,
+                    "reason": reason,
+                    "source_ip": source_ip or "unknown",
+                    "action": "ACCOUNT_DEACTIVATED_AND_SESSIONS_TERMINATED",
+                },
+                now=now,
+            )
+
+        return {
+            "user_sub": user_sub,
+            "user_found": True,
+            "user_blocked": True,
+            "revoked_grants_count": revoked_count,
+        }
+
+    @staticmethod
     def contain_incident(
         db: Session,
         incident_id: str,
@@ -401,14 +540,34 @@ class SecOpsService:
         actor_sub: str,
         now: datetime,
     ) -> dict[str, Any]:
-        """ServiceNow SOAR: Execute automated containment action (e.g. isolate IP)."""
+        """ServiceNow SOAR: Execute automated containment action (isolate IP, block user, or both)."""
         incident = db.get(SecurityIncident, incident_id)
         if not incident:
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Incident not found")
 
-        result = {}
-        if containment_action == "isolate_ip" and incident.source_ip:
+        valid_actions = {"isolate_ip", "block_user", "revoke_and_block_user", "isolate_ip_and_block_user"}
+        if containment_action not in valid_actions:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail=f"Invalid containment action '{containment_action}'. Allowed: {sorted(list(valid_actions))}")
+
+        result: dict[str, Any] = {"action": containment_action, "incident_id": incident_id}
+        action_descriptions = []
+
+        # Find target user: from incident record or associated security events
+        target_user = incident.user_sub
+        if not target_user:
+            prior_evt = db.execute(
+                select(SecurityEvent.user_sub).where(
+                    SecurityEvent.incident_id == incident_id,
+                    SecurityEvent.user_sub.isnot(None),
+                ).limit(1)
+            ).scalar_one_or_none()
+            if prior_evt:
+                target_user = prior_evt
+
+        # 1. IP Isolation at WAF layer
+        if containment_action in ("isolate_ip", "isolate_ip_and_block_user") and incident.source_ip:
             rep = db.get(IpReputation, incident.source_ip)
             if not rep:
                 rep = IpReputation(
@@ -428,16 +587,39 @@ class SecOpsService:
                 rep.block_reason = f"SOAR Containment for {incident_id}"
                 rep.manual_override = True
 
-            incident.status = "CONTAINED"
-            incident.updated_at = now
-            notes = list(incident.investigation_notes or [])
-            notes.append({
-                "author": actor_sub,
-                "timestamp": now.isoformat(),
-                "text": f"SOAR Action executed: IP {incident.source_ip} permanently isolated at WAF layer.",
-            })
-            incident.investigation_notes = notes
-            result = {"action": "isolate_ip", "ip": incident.source_ip, "status": "PERM_BLOCKED"}
+            result["ip"] = incident.source_ip
+            result["status"] = "PERM_BLOCKED"
+            action_descriptions.append(f"IP {incident.source_ip} permanently isolated at WAF layer")
+
+        # 2. User Suspension and Grant Revocation
+        if containment_action in ("block_user", "revoke_and_block_user", "isolate_ip_and_block_user"):
+            if target_user:
+                res_user = SecOpsService.revoke_access_and_block_user(
+                    db=db,
+                    user_sub=target_user,
+                    reason=f"SOAR Containment executed for {incident_id} by {actor_sub}",
+                    actor_sub=actor_sub,
+                    now=now,
+                    source_ip=incident.source_ip,
+                )
+                result["user_sub"] = target_user
+                result["user_blocked"] = res_user["user_blocked"]
+                result["revoked_grants_count"] = res_user["revoked_grants_count"]
+                action_descriptions.append(f"User {target_user} account suspended and {res_user['revoked_grants_count']} active grants revoked")
+            else:
+                result["user_action"] = "none"
+                result["warning"] = "No user identity associated with this incident"
+                action_descriptions.append("No associated user account to contain")
+
+        incident.status = "CONTAINED"
+        incident.updated_at = now
+        notes = list(incident.investigation_notes or [])
+        notes.append({
+            "author": actor_sub,
+            "timestamp": now.isoformat(),
+            "text": f"SOAR Action '{containment_action}' executed: {'; '.join(action_descriptions)}.",
+        })
+        incident.investigation_notes = notes
 
         AuditService.append_event(
             session=db,
@@ -449,6 +631,8 @@ class SecOpsService:
                 "incident_id": incident_id,
                 "action": containment_action,
                 "source_ip": incident.source_ip,
+                "user_sub": target_user,
+                "revoked_grants_count": result.get("revoked_grants_count", 0),
             },
             now=now,
         )

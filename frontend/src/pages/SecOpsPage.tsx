@@ -346,6 +346,29 @@ export const SecOpsPage: React.FC = () => {
     }
   };
 
+  const handleContainIncident = async (action: 'isolate_ip' | 'block_user' | 'revoke_and_block_user' | 'isolate_ip_and_block_user') => {
+    if (!selectedIncident) return;
+    try {
+      await apiFetch(`/api/secops/incidents/${selectedIncident.id}/contain`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+      const desc =
+        action === 'isolate_ip'
+          ? `IP ${selectedIncident.source_ip} isolated at WAF layer.`
+          : action === 'block_user' || action === 'revoke_and_block_user'
+          ? `User suspended and active access grants revoked.`
+          : `IP isolated, user account suspended, and all active access grants revoked.`;
+      setActionSuccess(`Containment executed: ${desc}`);
+      fetchIncidentDetails(selectedIncident.id);
+      fetchIncidents();
+      fetchIpReputations();
+      fetchSummary();
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
   const handleAddIncidentNote = async () => {
     if (!selectedIncident || !newNote.trim()) return;
     setSavingNote(true);
@@ -1228,6 +1251,39 @@ export const SecOpsPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* SOAR Automated Containment Actions */}
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 700, display: 'block', marginBottom: '0.4rem' }}>
+                  SOAR Active Containment:
+                </span>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleContainIncident('isolate_ip')}
+                    className="btn btn-sm btn-secondary"
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem', borderColor: '#b91c1c', color: '#b91c1c' }}
+                    title="Block source IP address at WAF boundary"
+                  >
+                    Isolate IP
+                  </button>
+                  <button
+                    onClick={() => handleContainIncident('revoke_and_block_user')}
+                    className="btn btn-sm btn-secondary"
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem', borderColor: '#b91c1c', color: '#b91c1c' }}
+                    title="Deactivate user account, terminate sessions, and revoke all active grants"
+                  >
+                    Revoke Grants & Block User
+                  </button>
+                  <button
+                    onClick={() => handleContainIncident('isolate_ip_and_block_user')}
+                    className="btn btn-sm btn-secondary"
+                    style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem', background: 'rgba(185, 28, 28, 0.08)', borderColor: '#b91c1c', color: '#b91c1c', fontWeight: 700 }}
+                    title="Execute both IP boundary restriction and user grant revocation"
+                  >
+                    Isolate IP & Block User
+                  </button>
+                </div>
+              </div>
+
               {/* Status Action Buttons */}
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
@@ -1688,6 +1744,22 @@ export const SecOpsPage: React.FC = () => {
                   <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Risk Score: {simResult.risk_score} / 100 ({simResult.severity})
                   </div>
+                  {simResult.user_blocked && (
+                    <div
+                      style={{
+                        marginTop: '0.6rem',
+                        padding: '0.45rem 0.65rem',
+                        background: 'rgba(185, 28, 28, 0.15)',
+                        border: '1px solid #b91c1c',
+                        borderRadius: '4px',
+                        color: '#b91c1c',
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      Automated Containment: User account suspended & {simResult.revoked_grants_count || 0} active grants revoked.
+                    </div>
+                  )}
                 </div>
 
                 {/* Details Breakdown */}

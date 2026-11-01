@@ -14,7 +14,21 @@ from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 from app.main import create_app
 from app.db.engine import SessionLocal, init_database
-from app.db.models import User, UserRole, SecurityEvent, SecurityIncident, IpReputation, ThreatIntelIndicator
+from app.db.models import (
+    User,
+    UserRole,
+    SecurityEvent,
+    SecurityIncident,
+    IpReputation,
+    ThreatIntelIndicator,
+    Grant,
+    AccessRequest,
+    Resource,
+    Session as SessionModel,
+    AuditEvent,
+    Notification,
+)
+from app.services.gateway import SimulationGateway
 from app.domain.secops import (
     scan_input,
     calculate_risk_score,
@@ -36,11 +50,14 @@ def setup_secops_data():
     init_database()
     db = SessionLocal()
     try:
-        # Ensure Rachel Ramos (Security Officer) exists
-        if not db.get(User, "R001"):
+        # Ensure Rachel Ramos (Security Officer) exists and is active
+        r_user = db.get(User, "R001")
+        if not r_user:
             db.add(User(sub="R001", display_name="Rachel Ramos (SecOps Admin)", department="Security", active=True))
             db.add(UserRole(sub="R001", role="risk_reviewer"))
             db.add(UserRole(sub="R001", role="security_admin"))
+        else:
+            r_user.active = True
 
         # Add Threat Intel sample
         if not db.get(ThreatIntelIndicator, "ioc_test_c2"):
@@ -289,3 +306,341 @@ def test_threat_intel_repository_management(client):
     assert list_res.status_code == 200
     indicators = list_res.json()["indicators"]
     assert any(i["value"] == "apt29-test-dropzone.org" for i in indicators)
+
+
+@pytest.mark.ec("EC-SEC10")
+def test_repeated_malicious_requests_revoke_access_and_block_user(client):
+    """EC-SEC10: Repeated malicious requests from same IP automatically revoke grants and block user account."""
+    init_database()
+    db = SessionLocal()
+    test_ip = "198.51.100.177"
+    user_id = "usr_malicious_bob"
+    grant_id = "grant_bob_001"
+    res_id = "dataset_risk_model"
+
+    try:
+        # 1. Setup resource, user with active grant and active session
+        if not db.get(Resource, res_id):
+            db.add(Resource(
+                id=res_id,
+                name="Risk Evaluation Model",
+                kind="model",
+                tier="RESTRICTED_SYNTHETIC",
+                owner_sub="R001",
+                allowed_actions=[{"name": "query", "risk_weight": 20}],
+                active=True,
+            ))
+        db.query(SecurityIncident).filter((SecurityIncident.user_sub == user_id) | (SecurityIncident.source_ip == test_ip)).delete()
+        db.query(SecurityEvent).filter((SecurityEvent.user_sub == user_id) | (SecurityEvent.source_ip == test_ip)).delete()
+        db.query(Notification).filter(Notification.to_sub == user_id).delete()
+        db.query(Grant).filter(Grant.requester_sub == user_id).delete()
+        db.query(AccessRequest).filter(AccessRequest.requester_sub == user_id).delete()
+        db.query(SessionModel).filter(SessionModel.sub == user_id).delete()
+        db.query(UserRole).filter(UserRole.sub == user_id).delete()
+        db.query(User).filter(User.sub == user_id).delete()
+        db.query(IpReputation).filter(IpReputation.ip == test_ip).delete()
+        db.commit()
+
+        user = User(
+            sub=user_id,
+            display_name="Malicious Bob",
+            email="bob.attacker@example.org",
+            department="Operations",
+            active=True,
+        )
+        db.add(user)
+        db.commit()
+
+        t0 = datetime(2026, 11, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        # Create access request required by FK
+        db.add(AccessRequest(
+            id="req_bob_001",
+            requester_sub=user_id,
+            resource_id=res_id,
+            purpose_code="SECURITY_REDTEAM_SIM",
+            purpose_text="Testing redteam sim",
+            actions=["query"],
+            duration_minutes=1440,
+            risk_controls=["activity_logging"],
+            status="APPROVED",
+            policy_version=1,
+            content_hash="content_hash_bob",
+            created_at=t0 - timedelta(hours=2),
+        ))
+        db.commit()
+
+        # Create active grant
+        active_grant = Grant(
+            id=grant_id,
+            request_id="req_bob_001",
+            requester_sub=user_id,
+            resource_id=res_id,
+            purpose_code="SECURITY_REDTEAM_SIM",
+            actions=["query"],
+            activated_at=t0 - timedelta(hours=1),
+            expires_at=t0 + timedelta(hours=24),
+            status="ACTIVE",
+            revoked_at=None,
+        )
+        db.add(active_grant)
+        # Create active session
+        session_row = SessionModel(
+            id="hashed_session_bob_001",
+            sub=user_id,
+            csrf_token="csrf_bob_token",
+            created_at=t0,
+            last_seen_at=t0,
+            absolute_expires_at=t0 + timedelta(hours=8),
+        )
+        db.add(session_row)
+        db.commit()
+
+        # Verify gateway allows access before attack
+        res_before = SimulationGateway.invoke(
+            db=db,
+            resource_id=res_id,
+            action="query",
+            declared_purpose="SECURITY_REDTEAM_SIM",
+            caller_sub=user_id,
+            now=t0,
+        )
+        assert res_before["decision"]["allow"] is True
+
+        # Close db before making API calls via client to avoid SQLite file lock
+        db.close()
+
+        # 2. Simulate 3 repeated malicious attack requests from the same IP
+        csrf_admin = _login(client, "R001")
+        sim_data = None
+        user_blocked_observed = False
+        total_revoked = 0
+        for i in range(3):
+            sim_res = client.post(
+                "/api/secops/simulate",
+                headers={"X-CSRF-Token": csrf_admin},
+                json={
+                    "source_ip": test_ip,
+                    "method": "POST",
+                    "path": f"/api/resources/{res_id}/query",
+                    "payload": f"SELECT * FROM users WHERE id='1' OR '1'='1' -- attempt {i}",
+                    "user_sub": user_id,
+                },
+            )
+            assert sim_res.status_code == 200
+            sim_data = sim_res.json()
+            assert sim_data["action"] == "BLOCKED"
+            if sim_data.get("user_blocked"):
+                user_blocked_observed = True
+            total_revoked += sim_data.get("revoked_grants_count", 0)
+
+        # On repeated attack, automated containment must trigger:
+        assert user_blocked_observed is True
+        assert total_revoked >= 1
+
+        # 3. Verify in database: User account blocked, Grant revoked, Sessions deleted
+        db = SessionLocal()
+        user_db = db.get(User, user_id)
+        assert user_db.active is False
+
+        grant_db = db.get(Grant, grant_id)
+        assert grant_db.status == "REVOKED"
+        assert grant_db.revoked_at is not None
+        assert grant_db.revoke_emergency is True
+        assert grant_db.revoke_reason_code == "SECURITY_INCIDENT"
+
+        active_sessions = db.query(SessionModel).filter(SessionModel.sub == user_id).all()
+        assert len(active_sessions) == 0
+
+        # Verify audit events written in same transaction
+        suspend_event = db.query(AuditEvent).filter(
+            AuditEvent.subject_type == "user",
+            AuditEvent.subject_id == user_id,
+            AuditEvent.type == "USER_SUSPENDED",
+        ).first()
+        assert suspend_event is not None
+        assert suspend_event.payload["action"] == "ACCOUNT_DEACTIVATED_AND_SESSIONS_TERMINATED"
+
+        revoke_event = db.query(AuditEvent).filter(
+            AuditEvent.subject_type == "grant",
+            AuditEvent.subject_id == grant_id,
+            AuditEvent.type == "GRANT_REVOKED",
+        ).first()
+        assert revoke_event is not None
+        assert revoke_event.payload["emergency"] is True
+
+        # 4. Verify Gateway PEP now rejects the user and grant
+        res_after = SimulationGateway.invoke(
+            db=db,
+            resource_id=res_id,
+            action="query",
+            declared_purpose="SECURITY_REDTEAM_SIM",
+            caller_sub=user_id,
+            now=t0 + timedelta(minutes=5),
+        )
+        assert res_after["decision"]["allow"] is False
+        assert res_after["decision"]["code"] in ("DENY_USER_INACTIVE", "DENY_GRANT_REVOKED", "DENY_UNAUTHENTICATED")
+
+    finally:
+        try:
+            db.rollback()
+            db.query(SecurityIncident).filter((SecurityIncident.user_sub == user_id) | (SecurityIncident.source_ip == test_ip)).delete()
+            db.query(SecurityEvent).filter((SecurityEvent.user_sub == user_id) | (SecurityEvent.source_ip == test_ip)).delete()
+            db.query(Notification).filter(Notification.to_sub == user_id).delete()
+            db.query(Grant).filter(Grant.requester_sub == user_id).delete()
+            db.query(AccessRequest).filter(AccessRequest.requester_sub == user_id).delete()
+            db.query(SessionModel).filter(SessionModel.sub == user_id).delete()
+            db.query(UserRole).filter(UserRole.sub == user_id).delete()
+            db.query(User).filter(User.sub == user_id).delete()
+            db.query(IpReputation).filter(IpReputation.ip == test_ip).delete()
+            db.commit()
+        except Exception:
+            pass
+        finally:
+            db.close()
+
+
+@pytest.mark.ec("EC-SEC11")
+def test_soar_containment_isolate_ip_and_block_user(client):
+    """EC-SEC11: SOAR incident containment isolates IP and blocks user account with grant revocation."""
+    init_database()
+    db = SessionLocal()
+    test_ip = "198.51.100.188"
+    user_id = "usr_contain_target"
+    grant_id = "grant_contain_001"
+    res_id = "dataset_risk_model"
+
+    try:
+        if not db.get(Resource, res_id):
+            db.add(Resource(
+                id=res_id,
+                name="Risk Evaluation Model",
+                kind="model",
+                tier="RESTRICTED_SYNTHETIC",
+                owner_sub="R001",
+                allowed_actions=[{"name": "query", "risk_weight": 20}],
+                active=True,
+            ))
+        db.query(SecurityIncident).filter((SecurityIncident.user_sub == user_id) | (SecurityIncident.source_ip == test_ip)).delete()
+        db.query(SecurityEvent).filter((SecurityEvent.user_sub == user_id) | (SecurityEvent.source_ip == test_ip)).delete()
+        db.query(Notification).filter(Notification.to_sub == user_id).delete()
+        db.query(Grant).filter(Grant.requester_sub == user_id).delete()
+        db.query(AccessRequest).filter(AccessRequest.requester_sub == user_id).delete()
+        db.query(SessionModel).filter(SessionModel.sub == user_id).delete()
+        db.query(UserRole).filter(UserRole.sub == user_id).delete()
+        db.query(User).filter(User.sub == user_id).delete()
+        db.query(IpReputation).filter(IpReputation.ip == test_ip).delete()
+        db.commit()
+
+        user = User(
+            sub=user_id,
+            display_name="Containment Target",
+            email="target@example.org",
+            department="Operations",
+            active=True,
+        )
+        db.add(user)
+        db.commit()
+
+        t0 = datetime(2026, 11, 1, 14, 0, 0, tzinfo=timezone.utc)
+
+        db.add(AccessRequest(
+            id="req_contain_001",
+            requester_sub=user_id,
+            resource_id=res_id,
+            purpose_code="SECURITY_REDTEAM_SIM",
+            purpose_text="Testing redteam sim",
+            actions=["query"],
+            duration_minutes=1440,
+            risk_controls=["activity_logging"],
+            status="APPROVED",
+            policy_version=1,
+            content_hash="content_hash_contain",
+            created_at=t0 - timedelta(hours=2),
+        ))
+        db.commit()
+
+        db.add(Grant(
+            id=grant_id,
+            request_id="req_contain_001",
+            requester_sub=user_id,
+            resource_id=res_id,
+            purpose_code="SECURITY_REDTEAM_SIM",
+            actions=["query"],
+            activated_at=t0,
+            expires_at=t0 + timedelta(hours=24),
+            status="ACTIVE",
+        ))
+        db.commit()
+        # Close db before making API calls to avoid SQLite locks
+        db.close()
+
+        # 1. Trigger incident via simulation without user_sub (unauthenticated incident)
+        csrf = _login(client, "R001")
+        sim_res = client.post(
+            "/api/secops/simulate",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "source_ip": test_ip,
+                "method": "POST",
+                "path": f"/api/resources/{res_id}/query",
+                "payload": "; rm -rf / ; cat /etc/passwd",
+            },
+        )
+        assert sim_res.status_code == 200
+        incident_id = sim_res.json()["incident_id"]
+        assert incident_id is not None
+
+        # Link incident to the target user so SOAR containment knows which user to contain
+        db = SessionLocal()
+        inc = db.get(SecurityIncident, incident_id)
+        assert inc is not None
+        inc.user_sub = user_id
+        db.commit()
+        db.close()
+
+        # 2. Call SOAR containment: isolate_ip_and_block_user
+        contain_res = client.post(
+            f"/api/secops/incidents/{incident_id}/contain",
+            headers={"X-CSRF-Token": csrf},
+            json={"action": "isolate_ip_and_block_user"},
+        )
+        assert contain_res.status_code == 200
+        data = contain_res.json()["result"]
+        assert data["action"] == "isolate_ip_and_block_user"
+        assert data["status"] == "PERM_BLOCKED"
+        assert data["user_blocked"] is True
+        assert data["revoked_grants_count"] >= 1
+
+        # 3. Verify DB state: IP is PERM_BLOCKED, User is inactive, Grant is REVOKED
+        db = SessionLocal()
+        rep = db.get(IpReputation, test_ip)
+        assert rep is not None
+        assert rep.status == "PERM_BLOCKED"
+
+        user_db = db.get(User, user_id)
+        assert user_db is not None
+        assert user_db.active is False
+
+        grant_db = db.get(Grant, grant_id)
+        assert grant_db is not None
+        assert grant_db.status == "REVOKED"
+        assert grant_db.revoke_emergency is True
+
+    finally:
+        try:
+            db.rollback()
+            db.query(SecurityIncident).filter((SecurityIncident.user_sub == user_id) | (SecurityIncident.source_ip == test_ip)).delete()
+            db.query(SecurityEvent).filter((SecurityEvent.user_sub == user_id) | (SecurityEvent.source_ip == test_ip)).delete()
+            db.query(Notification).filter(Notification.to_sub == user_id).delete()
+            db.query(Grant).filter(Grant.requester_sub == user_id).delete()
+            db.query(AccessRequest).filter(AccessRequest.requester_sub == user_id).delete()
+            db.query(SessionModel).filter(SessionModel.sub == user_id).delete()
+            db.query(UserRole).filter(UserRole.sub == user_id).delete()
+            db.query(User).filter(User.sub == user_id).delete()
+            db.query(IpReputation).filter(IpReputation.ip == test_ip).delete()
+            db.commit()
+        except Exception:
+            pass
+        finally:
+            db.close()

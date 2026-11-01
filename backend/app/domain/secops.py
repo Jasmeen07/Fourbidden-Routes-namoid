@@ -208,3 +208,36 @@ def mask_sensitive_data(text: str) -> str:
     masked = re.sub(r"(?i)bearer\s+[a-zA-Z0-9_\-\.]+", "Bearer [MASKED]", masked)
     return masked[:250]  # truncate to 250 chars max for compact audit
 
+
+def should_contain_user(
+    action: str,
+    repeat_count: int,
+    risk_score: int,
+    user_sub: str | None,
+) -> bool:
+    """Evaluates whether malicious activity warrants revoking access and blocking user (EC-SEC07, EC-SEC10).
+
+    Triggered when:
+    - User is authenticated / identified (user_sub is present), AND
+    - Either the request was blocked by WAF due to high/critical risk or threat intel,
+      OR there are multiple repeated malicious attempts (repeat_count >= 3 with elevated risk >= 30).
+    """
+    if not user_sub:
+        return False
+    if action == "BLOCKED":
+        return True
+    if repeat_count >= 3 and risk_score >= 30:
+        return True
+    return False
+
+
+def evaluate_containment_reason(
+    action: str,
+    repeat_count: int,
+    risk_score: int,
+) -> str:
+    """Generates human-readable audit justification for user access revocation and account suspension."""
+    if action == "BLOCKED":
+        return f"Automatic containment: Request blocked by WAF with risk score {risk_score}"
+    return f"Automatic containment: Multiple malicious attempts ({repeat_count}) from same IP"
+

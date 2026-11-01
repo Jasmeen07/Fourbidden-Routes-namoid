@@ -531,7 +531,7 @@ def simulate_waf_attack(
     now = clock.now() if clock else datetime.now(timezone.utc)
 
     source_ip = payload.source_ip or "198.51.100.99"
-    effective_user = payload.user_sub or user.sub
+    effective_user = payload.user_sub
 
     result = SecOpsService.inspect_and_record(
         db=db,
